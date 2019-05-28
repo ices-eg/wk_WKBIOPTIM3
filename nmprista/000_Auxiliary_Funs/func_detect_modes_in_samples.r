@@ -6,23 +6,32 @@
 	
 	
 	# 2018-09-10: "extracted from sample_level_funs1.r"
+	# 2018-05-28: streamlined some arguments (added sampDesign, var_table; changed names) 
 
 
-func_detect_modes_in_samples<-function(x = droplevels(df0[df0$sampId %in% samples_to_analyze,]), variable = "lenCls", original_class_span = original_class_span, smooth_class_span = smooth_class_span, min_proportion_to_accept_mode = min_proportion_to_accept_mode)
+func_detect_modes_in_samples<-function(x, variable = "lenCls", original_class_span , smooth_class_span, min_proportion_to_accept_mode, sampDesign, var_table)
 {
 	# identifies modes and stores results of modal analyses
 		# note: numerical and categorical variables are processed differently
 	
-	
-	
+	# x (data.frame) is an RDB CA
+	# variable (string) is the variable to analyze [one of the columns of x] 
+	# original_class_span (integer) is the size of original class span in samples
+	# smooth_class_span (integer) is the size of desired smooth class span
+	# min_proportion_to_accept_mode (decimal) is the minimum proportion of the LF that a mode must have to be accepted (e.g., 0.05)
+	# sampDesign is a list of sampling design details, including "strata_var"
+	# var_table is a data.frame with variable and variable tupe (e.g., support variable_table)
 
-	# x <- df1[,c(sampling_design$strata_var, var1)]
+	# x <- df1[,c(sampDesign$strata_var, var1)]
 				# t1<-table(df1[sampling_options$strata_var])
 				# colnames(x)<-c("strata_id", variable)
 					# t2<-table(x$strata_id)
 					# x$total_strata <- t1[match(x$strata_id, names(t1))]
 				# x$samp_weight <- x$total_strata/(t2[match(x$strata_id, names(t2))])					
 				# freq_dist_pop_estimate_no_NAs<-tapply(x$samp_weight, x[,variable], sum)
+
+	a <- tapply(x[[variable]], x$sampId, function(x) sum(!is.na(x)))
+	if(sum(a[a<10])>0){stop("Some samples have less than 10 non-NA values for target_variable - you need to exclude them from dataset")}
 	
 	if (is.character(x[[variable]])) {x[[variable]]<-factor(is.character(x[[variable]]))}
 	
@@ -34,20 +43,20 @@ func_detect_modes_in_samples<-function(x = droplevels(df0[df0$sampId %in% sample
 	#print(paste("processing sample", as.character(x$sampId[1]))) 
 	#print(variable)
 		# if stratified and variable is not the stratification variable, then performs the raising 
-			if(sampling_design$stratified==TRUE & variable!=sampling_design$strata_var)
+			if(sampDesign$stratified==TRUE & variable!=sampDesign$strata_var)
 				{
 					
 				# computes totals for strata_var
-					if(sampling_design$strata_var %in% variable_table$variable[variable_table$variable=="numerical"])
+					if(sampDesign$strata_var %in% var_table$variable[var_table$variable=="numerical"])
 						{
-						t1<-table(factor(x[[sampling_design$strata_var]], levels=seq(min(x[[sampling_design$strata_var]], na.rm=T), max(x[[sampling_design$strata_var]], na.rm=T), by=variable_table[variable_table$variable == sampling_design$strata_var, "original_class_span"])))
+						t1<-table(factor(x[[sampDesign$strata_var]], levels=seq(min(x[[sampDesign$strata_var]], na.rm=T), max(x[[sampling_design$strata_var]], na.rm=T), by=variable_table[variable_table$variable == sampling_design$strata_var, "original_class_span"])))
 						} else
 							{
-							t1<-table(x[[sampling_design$strata_var]], useNA="al")
+							t1<-table(x[[sampDesign$strata_var]], useNA="al")
 							}
 				# extracts strata_var and target_var
 					#browser()
-					x <- x[,c(sampling_design$strata_var, variable)]
+					x <- x[,c(sampDesign$strata_var, variable)]
 				colnames(x)<-c("strata_id", variable)
 				# computes raised freq dist [NAs are considered]
 					t2<-table(x$strata_id, useNA="al")
@@ -59,7 +68,7 @@ func_detect_modes_in_samples<-function(x = droplevels(df0[df0$sampId %in% sample
 				# creates dummy dataset to enter analysis
 				x<-data.frame(1,rep(names(freq_dist_pop_estimate),freq_dist_pop_estimate))	
 				names(x)<-c("dummy",variable)
-				if(variable_table[variable_table$variable==variable,"type"]=="numerical"){x[[variable]]<-as.numeric(x[[variable]])}
+				if(var_table[var_table$variable==variable,"type"]=="numerical"){x[[variable]]<-as.numeric(x[[variable]])}
 				}
 	
 		if(!is.factor(x[[variable]]))
