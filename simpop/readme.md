@@ -1,1 +1,1 @@
-Scripts to evaluate the downsampling effect on length distribution estimates.
+Scripts to evaluate the downsampling effect on length distribution estimates at the population level.
