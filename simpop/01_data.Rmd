@@ -1,0 +1,326 @@
+---
+title: 'Optimization at the population level'
+author: "John Doe"
+date: '`r date()`'
+output:
+  html_document: default
+---
+
+This report import the data in the COST format and do some basic quality checks.
+
+
+```{r compil,eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+# just a reminder to how compile a docx doc
+if(F){
+rmarkdown::render("Data.Rmd",c("word_document"))
+}
+```
+
+
+# Tools
+
+R, Rstudio and packages.
+
+```{r global_options}
+#working directory have to be the directory where is the Rmarkdown file.
+
+#setwd("~/ifremer/wkbioptim2/scripts/pop_level_sim_ope")
+
+#R general option:
+options(stringsAsFactors = FALSE)
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=6,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+#package
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(dplyr) 
+library(ggplot2)
+library(maps)
+library(mapdata)
+library(pander)
+library(ggrepel)
+#DATRAS is not available on CRAN so use devtools:
+#devtools::install_github("DTUAqua/DATRAS/DATRAS")
+library(DATRAS)
+#library(earthmovdist) deprecated
+library(emdist)
+
+#source local functions file
+source("fct.R")
+
+```
+# Data
+
+The data are read and imported in the COST format (a old version of Fishframe).
+Regarding the data submitted to the RDB, some columns have to be removed.
+The functions to import the data are : 
+
+- `clData()`: to import landings information,
+- `ceData()`: to import effort,
+- `csData()`: to import sampling data.
+
+General methods (`head()`,`summary()`...) are available for these objects.
+
+## A short example
+
+Here an example using the example dataset of the sharepoint (but the chunk
+option `eval` is set to `FALSE`, so the code is not submitted to R):
+```{r data1,eval=F}
+ #read CS
+ tr<-read.csv("./data/TR.csv",sep=",")
+ hh<-read.csv("./data/HH.csv",sep=",")
+ sl<-read.csv("./data/SL.csv",sep=",")
+ hl<-read.csv("./data/HL.csv",sep=",")
+ ca<-read.csv("./data/CA.csv",sep=",")
+ #prepare the data to the COST format
+ tr<-tr[,-1]
+ hh<-hh[!is.na(hh$trpCode),-1]
+ sl<-sl[,-c(1,18,19)]
+ hl<-hl[,-c(1,15,19)]
+ CSr<-csData(tr,hh,sl,hl)
+```
+
+## Real data
+
+Some data are available in the data directory. They are french data from the
+area 27.7.e and 27.7.d in 2015, 2016 and 2017 containing all the species.
+Pick one randomly !
+
+The data are loaded in R:
+```{r data2}
+	 load("./data/CLr2015_7d.rdata") #CLr
+	 load("./data/CEr2015_7d.rdata") #CEr
+	 load("./data/CSr2015_7d.rdata") #CSr
+```
+
+# Exploratory analyses
+
+A short but intense exploratory data analyses starts in order to understand what
+is the information availalbe in these objects. 
+
+## Map
+
+```{r map}
+#map1<-mapclcs(CLr,CSr)
+#taxon by gear
+	mapcl<-CLr@cl%>%
+		mutate(gear=substr(foCatEu6,1,3))%>%
+		group_by(rect,year,quarter)%>%
+		summarise(lan=sum(landWt,na.rm=T)/1000)%>%
+		ungroup()
+	mapcs<-left_join(CSr@sl,CSr@hh)# %>%
+	mapcs<-left_join(CSr@sl,CSr@hh) %>%
+		mutate(gear=substr(foCatEu6,1,3),
+		       idsamp=paste(trpCode,staNum),
+		       quarter=ceiling(as.numeric(substr(date,6,7))/3)) %>%
+		group_by(x=lonIni,y=latIni,catchCat,quarter)%>%
+		summarise(wsamp=sum(wt,na.rm=T),nbsamp=n_distinct(idsamp))
+	#draw a map
+	mapcl$lon<-mapcl$lat<-mapcl$lonc<-mapcl$latc<-NA
+	for(i in 1:nrow(mapcl)){
+		if(nchar(mapcl$rect[i])==4){
+		mapcl$lon[i]<-DATRAS::icesSquare2coord(mapcl$rect[i],"midpoint")$lon
+		mapcl$lat[i]<-DATRAS::icesSquare2coord(mapcl$rect[i],"midpoint")$lat
+		mapcl$lonc[i]<-DATRAS::icesSquare2coord(mapcl$rect[i],"corner")$lon
+		mapcl$latc[i]<-DATRAS::icesSquare2coord(mapcl$rect[i],"corner")$lat
+		}
+	}
+	rangex<-c(min(mapcl$lon,na.rm=T)-.1,max(mapcl$lon,na.rm=T)+.1)
+	rangey<-c(min(mapcl$lat,na.rm=T)-.1,max(mapcl$lat,na.rm=T)+.1)
+	#poly map
+	map0<-ggplot(mapcl)+theme_bw()+
+		geom_raster(data=mapcl,aes(x=lon,y=lat,fill=lan),stat="identity",alpha=.75)+ 
+		geom_point(data=mapcs,aes(x=x,y=y,size=wsamp),alpha=1,shape=1)+
+		borders("worldHires",xlim=rangex,ylim=rangey,fill="light grey",colour="light grey")+
+		coord_quickmap(xlim=range(mapcl$lon,na.rm=T),ylim=range(mapcl$lat,na.rm=T))+
+		scale_fill_distiller(palette='Spectral',name="Landings\n(kg)")+
+		ggtitle(paste("FRA landings and samplings",unique(CLr@cl$year),unique(CLr@cl$area)))+
+		facet_wrap(~quarter,ncol=2)+xlab("")+ylab("")
+map0
+print(map0)
+ggsave(file="map00.png")
+```
+
+## Species and gear
+
+Map the landings by gear with the number of sampling.
+
+```{r explo2,eval=T,fig.height=8}
+#plt1<-pltsppgear(CLr,CSr)
+sppgear<-CLr@cl%>%
+        mutate(gear=substr(foCatEu6,1,3),spp=taxon)%>%
+        group_by(gear,spp)%>%
+        summarise(lan=sum(landWt,na.rm=T)/1000)%>%
+        ungroup()
+sppsamp<-left_join(CSr@sl,CSr@hh) %>%filter(catchCat=="LAN")%>%
+        mutate(gear=substr(foCatEu6,1,3),
+		idsamp=paste(trpCode))%>%
+        group_by(gear,spp)%>%
+        summarise(sampw=sum(wt,na.rm=T)/1000,nbsamp=n_distinct(idsamp))%>%
+        ungroup()
+#a plot
+p1<-ggplot()+
+        geom_raster(data=sppgear,aes(x=gear,y=spp,fill=lan))+
+                                scale_fill_distiller(palette='Spectral',name="Landings (t)",trans="log10")+
+        geom_point(data=sppsamp,aes(x=gear,y=spp,size=nbsamp),shape=1)+
+		scale_size(name="Number of trips")+
+	xlab("Gears")+ylab("Species")+
+        theme_bw()+
+        theme(axis.text.x = element_text(size=8, angle=90),
+                axis.text.y = element_text(size=6, angle=0),
+                strip.text.x=element_text(size=8,angle=90),
+        strip.text.y=element_text(size=8,angle=0),
+        #legend.position="bottom",
+	)
+print(p1)
+ggsave(file="sppgear0.png")
+
+#map nb of sampling and landings by gear/quarter
+trimgearlan<-CLr@cl%>%
+        mutate(gear=substr(foCatEu6,1,3),quarter,spp=taxon)%>%
+        group_by(gear,quarter)%>%
+        summarise(lan=sum(landWt,na.rm=T)/1000,nbspp=n_distinct(spp))%>%
+        ungroup()
+trimgearsamp<-left_join(CSr@sl,CSr@hh) %>%
+        mutate(gear=substr(foCatEu6,1,3),quarter=ceiling(as.numeric(substr(date,6,7))/3),
+		idsamp=paste(trpCode))%>%
+        group_by(gear,quarter)%>%
+        summarise(sampw=sum(wt,na.rm=T)/1000,nbsamp=n_distinct(idsamp),nbspp=n_distinct(spp))%>%
+        ungroup()
+#a plot
+p1<-ggplot()+
+        geom_raster(data=trimgearlan,aes(x=quarter,y=gear,fill=nbspp))+
+                                scale_fill_distiller(palette='Spectral',name="Number of landed species")+
+        geom_point(data=trimgearsamp,aes(x=quarter,y=gear,size=nbsamp),shape=1)+
+		scale_size(name="Number of trip sampled")+
+	xlab("Quarter")+ylab("Gear")+
+        theme_bw()+
+        theme(#axis.text.x = element_text(size=8, angle=90),
+                axis.text.y = element_text(size=10, angle=0),
+                strip.text.x=element_text(size=8,angle=90),
+        strip.text.y=element_text(size=8,angle=0),
+        legend.position="bottom")
+print(p1)
+
+ggsave(file="trimgear1.png")
+#select gear
+listgear<-trimgearsamp%>%group_by(gear)%>%mutate(test=n_distinct(quarter))%>%filter(test==4)%>%select(gear)%>%distinct()
+
+CLr<-subset(CLr,substr(foCatEu6,1,3)%in%listgear$gear)
+CSr<-subset(CSr,substr(foCatEu6,1,3)%in%listgear$gear,table="hh")
+
+
+
+
+```
+
+To much information ! Use the most landed and sampled species.
+
+```{r explo3,eval=T,fig.height=8}
+#not usable: work on the species the most landed 
+lantot<-CLr@cl%>%
+	group_by(spp=taxon)%>%
+	summarise(lan=sum(landWt,na.rm=T)/1000)%>%
+	ungroup()
+samptot<-left_join(CSr@sl,CSr@hh) %>%
+	mutate(idsamp=paste(trpCode))%>%
+	group_by(spp)%>%
+	summarise(nbsamp=n_distinct(idsamp))%>%
+	ungroup()
+all<-full_join(lantot,samptot)%>%arrange(desc(lan),desc(nbsamp))%>%
+	mutate(selection=ifelse(nbsamp>100&lan>100,"selected","not selected"))
+p1<-ggplot(all,aes(x=lan,y=nbsamp,label=spp,color=selection))+
+	geom_label_repel(size=3)+
+	geom_point()+
+	xlab("Total landings (kg)")+
+	ylab("Number of sampled trip with the species")+
+  	scale_y_log10()+
+	scale_x_log10()
+print(p1)
+ggsave(file="sppselection.png")
+
+#select the species
+#all%>%filter(nbsamp>100&lan>500)
+listspp<-all%>%filter(selection=="selected")
+#subset the data
+CLr<-subset(CLr,taxon%in%listspp$spp)
+CSr<-subset(CSr,spp%in%listspp$spp,table="sl")
+#susbet by gear
+#CLr<-subset(CLr,substr(foCatEu6,1,3)%in%"OTB")
+#CLr<-subset(CSr,substr(foCatEu6,1,3)%in%"OTB",table="hh")
+
+#check the new data
+plt2<-pltsppgear(CLr,CSr)
+
+print(plt2)
+ggsave(file="sppgearfinal.png")
+```
+
+Looks fine now !
+
+# Stratification
+
+The temporal, spatial and technical stratification is defined here:
+
+- space: ICES division,
+- time: quarter,
+- technical: gear (to avoid the tremendous metier conversion to ICES reference
+  table).
+
+```{r stratification}
+#compute the length distribution
+met<-data.frame(old=sort(unique(c(CLr@cl$foCatEu6,CSr@hh$foCatEu6))),new="other")%>%
+		mutate(new=substr(old,1,3))
+myStr<-strIni(timeStrata="quarter", techStrata='foCatEu6',spaceStrat='area',
+		      tcRec=list(from=met$old,to=met$new))
+CSv<-csDataVal(CSr)
+CSc<-csDataCons(CSv,myStr)
+CLv<-clDataVal(CLr)
+CLc<-clDataCons(CLv,myStr)
+CEv<-ceDataVal(CEr)
+CEc<-ceDataCons(CEv,myStr)
+#check
+p1<-pltsppgearcons(CLc,CSc)
+plot(p1)
+ggsave(file="sppstratif.png")
+#save the data with extra data
+save(CLc,CEc,CSc,myStr,listspp,file="./data/dataready.rdata")
+```
+
+# Estimation
+
+## Examples
+
+### Raising to the trip
+
+```{r  estimsampex}
+dbelan1<-dbeObject(species=listspp$spp[1],catchCat='LAN',strataDesc=myStr)
+dbelan1<-RaiseLgth(dbelan1,CSc)
+#plot the length distribution
+p1<-pltlendbe(dbelan1)
+print(p1)
+#plot the cv distribution
+p1<-pltcvdbe(dbelan1)
+print(p1)
+#weighted cv
+print(dbelan1@lenNum$DCRcvIndicator)
+```
+
+### Raising to the total landings 
+
+```{r  estimpopex}
+dbelan1<-dbeObject(species=listspp$spp[1],catchCat='LAN',strataDesc=myStr)
+dbelan1<-RaiseLgth(dbelan1,CSc,CLc)
+#plot the length distribution
+p1<-pltlendbe(dbelan1)
+print(p1)
+#plot the cv distribution
+p1<-pltcvdbe(dbelan1)
+print(p1)
+#weighted cv
+print(dbelan1@lenNum$DCRcvIndicator)
+```
+

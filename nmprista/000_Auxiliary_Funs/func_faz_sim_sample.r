@@ -64,7 +64,7 @@ strata_var<-sampOpt$strata_var
 	for (j in 1:length(sampOpt$samp_sizes))
 	{
 
-				print(paste("Simulating sample size", sampOpt$samp_sizes[j]))		
+				#print(paste("Simulating sample size", sampOpt$samp_sizes[j]))		
 						
 						# creates a list to hold results of simulations (each leaf is a simulation of size j)	
 												

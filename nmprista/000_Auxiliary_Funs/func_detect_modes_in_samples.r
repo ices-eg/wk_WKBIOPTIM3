@@ -30,8 +30,9 @@ func_detect_modes_in_samples<-function(x = droplevels(df0[df0$sampId %in% sample
 	
 	ls1<-split(x, x$sampId)
 		
-	ls2<-lapply(ls1, function(x){ print(paste("processing sample", as.character(x$sampId[1]))); 
-	print(variable)
+	ls2<-lapply(ls1, function(x){ 
+	#print(paste("processing sample", as.character(x$sampId[1]))) 
+	#print(variable)
 		# if stratified and variable is not the stratification variable, then performs the raising 
 			if(sampling_design$stratified==TRUE & variable!=sampling_design$strata_var)
 				{
