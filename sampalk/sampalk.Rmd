@@ -27,6 +27,7 @@ knitr::opts_chunk$set(echo=FALSE,
 library(dplyr)
 library(ggplot2)
 library(sampling)
+library(FSA)
 library(FSAsim)
 library(purrr)
 ##library(openxlsx);library(mailR)
@@ -90,9 +91,10 @@ cat(figcap(name="popsimplt1",caption="Length at age in the virtual population"))
 
 
 ```{r popsimplt2, include=T,cache=T,echo=F,eval=T,height=5}
-p2<-ggplot(popfish,aes(len))+geom_histogram(binwidth=10)+
-	theme_bw()+ylab("")+xlab("Length (mm)")+
-	ggtitle(paste0("Length distribution of the simulated population\n",txtparam1,"\n",txtparam2))
+p2<-ggplot(gather(popfish),aes(value))+geom_histogram()+#binwidth=c(1,10))+
+	facet_wrap(~key,scale="free")+
+	theme_bw()+ylab("Count")+xlab("Value")+
+	ggtitle(paste0("Age and length distribution of the simulated population\n",txtparam1,"\n",txtparam2))
 print(p2)
 ```
 ```{r popsimplt2cap,cache=T,eval=T,echo=FALSE,results="asis"}
@@ -119,7 +121,7 @@ p1<-ggplot(selex,aes(x=x,y=sel,color=gear))+
 print(p1)
 ```
 
-Trips: 
+Population by gears + trips: 
 
 ```{r fleetandtrip, include=T,cache=T,echo=F,eval=T}
 #population accessible to each trip
@@ -130,10 +132,12 @@ popfish1<-popfish%>%filter(lengear1)%>%mutate(gear="1")
 popfish2<-popfish%>%filter(lengear2)%>%mutate(gear="2")
 popfish3<-popfish%>%filter(lengear3)%>%mutate(gear="3")
 popfishgear<-rbind(popfish1,popfish2,popfish3)
-p1<-ggplot(popfishgear,aes(len,fill=gear,group=gear))+
-	geom_histogram(binwidth=10,position="dodge")+
-	theme_bw()+ylab("")+xlab("Length (mm)")+
-	ggtitle(paste0("Length distribution available by gear"))
+p1<-ggplot(gather(popfishgear,key="key",value="value",age:len),
+	   aes(value,fill=gear,group=gear))+
+	geom_histogram(position="dodge")+
+	facet_wrap(~key,scale="free")+
+	theme_bw()+ylab("Count")+xlab("Value")+
+	ggtitle(paste0("Age and length distributions available by gear"))
 print(p1)
 
 #generate some trips
@@ -144,11 +148,15 @@ trip1<-do.call("rbind",rerun(100,do1trip(popfish1))) %>%mutate(gear="1")
 trip2<-do.call("rbind",rerun(100,do1trip(popfish2))) %>%mutate(gear="2") 
 trip3<-do.call("rbind",rerun(100,do1trip(popfish3))) %>%mutate(gear="3")
 tripgear<-rbind(trip1,trip2,trip3)
+
 #length distribution of the trips by gear
-p1<-ggplot(tripgear,aes(len,fill=gear,group=gear))+
-	geom_histogram(alpha=1,position="dodge",binwidth=10)+
-	theme_bw()+ylab("")+xlab("Length (mm)")+
-	ggtitle(paste0("Length distribution of the trips by gear"))
+p1<-ggplot(gather(tripgear,key="key",value="value",age:len),
+	   aes(value,fill=gear,group=gear))+
+	#geom_histogram(alpha=1,position="dodge",binwidth=10)+
+	geom_histogram(alpha=1,position="dodge")+
+	facet_wrap(~key,scale="free")+
+	theme_bw()+ylab("Count")+xlab("Value")+
+	ggtitle(paste0("Age and length distributions of the trips by gear"))
 print(p1)
 ```
 
@@ -160,12 +168,28 @@ Samples of ALK.
 - ??
 
 ```{r alk, include=T,cache=T,echo=F,eval=F}
+ranalk<-function(nb=100){
 # random sample of the pop
-sampalk<-sample_n(popfish,50)
-alk <- xtabs(~len+age,data=sampalk)#%>%transmute(age=trueage,lenCat))
-alkprop <- prop.table(alk,margin=1)
+	sampalk<-sample_n(popfish,100)
+	#complete the alkprop with zero for the non sample length
+	lenall<-data.frame(len=sort(unique(popfishgear$len)))
+	sampalkall<-left_join(lenall,sampalk,by="len")#%>%
+	sampalkall[is.na(sampalkall)]<-0
+	#compute the alk
+	alk <- xtabs(~len+age,data=sampalkall)#%>%transmute(age=trueage,lenCat))
+	alkprop <- prop.table(alk,margin=1)
+	rez1<-alkIndivAge(alkprop,age~len,data=popfishgear)#%>%mutate(trueage=age))
+	rez1%>%mutate(id="ranalk",nb,rep=sub("\\.","",format(Sys.time(),"%s%OS3")))
+}
+
+
 #a graph ?
-rez1<-alkIndivAge(alkprop,age~len,data=popfishgear)#%>%mutate(trueage=age))
+rez1<-ranalk(100)
+do1trip<-function(df){sample_n(df,300)%>%mutate(rep=sub("\\.","",format(Sys.time(),"%s%OS3")))}
+#generate 100 trip for popfish1
+ranalk100<-do.call("rbind",rerun(100,ranalk(100)))
+
+
 
 pipo<-rbind(rez1%>%select(age)%>%mutate(type="estim"),
 	    popfishgear%>%select(age)%>%mutate(type="pop"))
@@ -174,6 +198,8 @@ p1<-ggplot(pipo,aes(age,fill=type,group=type))+
 	theme_bw()+ylab("")+xlab("Length (mm)")+
 	ggtitle(paste0("Length distribution of the trips by gear"))
 print(p1)
+
+earthmovdist::emdL1(rez1$age,popfishgear$age)
 
 
 ```
