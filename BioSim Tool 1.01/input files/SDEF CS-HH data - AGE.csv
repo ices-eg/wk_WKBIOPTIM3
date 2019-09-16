@@ -1,0 +1,5 @@
+sampType;landCtry;vslFlgCtry;year;proj;trpCode;staNum;foVal;aggLev;catReg;sppReg;date;time;foDur;latIni;lonIni;latFin;lonFin;area;rect;subRect;foDep;waterDep;foCatNat;foCatEu5;foCatEu6;meshSize;selDev;meshSizeSelDev
+S;COUNTRY1;COUNTRY1;1900;STREAM project;1_ITA;1;NA;T;All;All;08/02/1900;NA;1200;-1;-1;-1;-1;GSA99;NA;NA;65;-1;OTB_shelf;NA;OTB_DEF_>=40_0_0;NA;NA;NA
+S;COUNTRY1;COUNTRY1;1900;STREAM project;4_ITA;1;NA;T;All;All;17/05/1900;NA;1200;-1;-1;-1;-1;GSA99;NA;NA;65;-1;OTB_shelf;NA;OTB_DEF_>=40_0_0;NA;NA;NA
+S;COUNTRY1;COUNTRY1;1900;STREAM project;2_ITA;1;NA;T;All;All;11/08/1900;NA;1200;-1;-1;-1;-1;GSA99;NA;NA;65;-1;OTB_shelf;NA;OTB_DEF_>=40_0_0;NA;NA;NA
+S;COUNTRY1;COUNTRY1;1900;STREAM project;3_ITA;1;NA;T;All;All;11/10/1900;NA;1200;-1;-1;-1;-1;GSA99;NA;NA;65;-1;OTB_shelf;NA;OTB_DEF_>=40_0_0;NA;NA;NA

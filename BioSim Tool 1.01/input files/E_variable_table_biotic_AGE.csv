@@ -1,0 +1,3 @@
+variable;type;original_class_span;smooth_class_span;min_proportion_to_accept_mode
+lenCls;numerical;1;2;0,01
+age;numerical;0.5;1;0,01
