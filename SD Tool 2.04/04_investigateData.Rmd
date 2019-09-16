@@ -1,0 +1,962 @@
+---
+title: "SDTool (STREAM project: (STrengthening REgional cooperation in the Area of fisheries biological data collection in the Mediterranean and Black Sea)): Investigate Data"
+author: "M.T. Facchini, I. Bitetto (COISPA, Italy)"
+date: '`r date()`'
+output: word_document
+---
+
+
+```{r compil, eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+
+# SD Tool v.3 and WKBIOPTIM SimTool v.1  were taken into account for the developement of the present tool.
+# SD tool has been developed in MARE/2014/19 project and updated in MARE/2016/22 project (STREAM)
+
+# The tool is documented in Deliverable D3.3 "Upgrade the methodological framework and tools for sampling optimization, implement and report case studies" (January 2019)
+
+# Authors of the first version of SD Tool: F. Gontrand, T. Rouyer, N. Billet, 2016
+# IFREMER, UMR MARBEC, Avenue Jean Monnet, BP 171, 34203 S` ete, France 
+
+# Authors of the first version of WKBIOPTIM scripts: Nuno Prista (SLU, Sweden) from a subgroup work carried out during a local Workshop on Sampling Design and Optimization (Lysekil, 31 October to 4 November 2016, unpublished)
+# SLU Aqua, Institute of Marine Research, Department of Acquatic Resources - Swedish University of Agricultural Sciences
+
+# Authors of this new tool: M.T. Facchini, I. Bitetto, 2017
+# COISPA Tecnologia & Ricerca, Via dei Trulli 18/20 - (Bari), Italy 
+
+# In case of use of the tool, the Authors should be cited.
+# If you have any comments or suggestions please contact the following e-mail addresses: facchini@coispa.it, bitetto@coispa.it
+# SD Tool is believed to be reliable. However, we disclaim any implied warranty or representation 
+# about its accuracy, completeness or appropriateness for any particular purpose.
+
+```
+
+
+#Tools
+
+R, Rstudio and packages.
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+
+
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=6,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+
+#load packages
+library(fishPifct)
+library(pander)
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(data.table) 
+
+#pander options
+panderOptions('table.split.table', 60)
+panderOptions('table.style', 'grid')
+panderOptions('table.split.cells', 10)
+panderOptions('table.alignment.default', 'left')
+panderOptions('table.alignment.rownames', 'right')
+panderOptions('decimal.mark', ',')
+panderOptions('graph.fontsize', '10')
+
+
+```
+
+
+
+# fishPifct code for the SDEF format check
+
+fishPifct is an R package combining some functions used in the fishPi project (fishPi). Some of these functions are coming from the SDEFQuality package from Norbert Billet (SDEFQuality).
+For further details visit the GitHub web page at the following link: https://github.com/ldbk/fishPifct 
+It is suggested to use it before running the analysis.
+
+
+##Settings 
+
+```{r settings}
+
+# set the working directory
+# set the directory for saving results
+myWD <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04"
+setwd(myWD)
+
+results_path <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04" 
+
+sapply(list.files(pattern="[.]R$", path="SDTfuns/", full.names=TRUE), source);
+  
+cl_all <- readRDS(paste(results_path, "/input files/costCL.rds", sep=""))
+cs_all <- readRDS(paste(results_path, "/input files/costCS.rds", sep=""))
+
+metier_shortcode <<- read.csv(paste(results_path, "/input files/metier_shortcode.csv", sep=""), sep=";")
+ 
+table_strat_res <<- read.csv(paste(results_path, "/input files/05_1_stratification_results.csv", sep=""), sep=";")
+
+years <- unique(cs_all@tr$year)
+years <- years[order(years)]
+
+ target_SPECIES <<- list("DPS" = "Parapenaeus longirostris")
+
+gsas <- unique(cs_all@hh$area)
+
+head(cs_all@tr)
+head(cs_all@hh)
+head(cs_all@sl)
+head(cs_all@hl)
+head(cs_all@ca)
+
+# strDates <- cs_all@hh$date
+# dates <- as.Date(strDates, "%d/%m/%Y")
+# cs_all@hh$date <- dates
+  
+cs_all@hh$foVal <- "V"
+
+cs_all@sl$landCat <- "HUC"
+cs_all@hl$landCat <- "HUC"
+
+cs_all@sl$subSampCat  <- ""
+cs_all@hl$subSampCat  <- ""
+
+cs_all@sl$catchCat <- toupper(cs_all@sl$catchCat) 
+cs_all@hl$catchCat <- toupper(cs_all@hl$catchCat) 
+cs_all@ca$catchCat <- toupper(cs_all@ca$catchCat)
+
+
+dir.create(results_path)
+
+for (nr in 1:nrow(cl_all@cl)) {
+  if (length(as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]]) ) > 0) {
+       cl_all@cl$foCatEu5[nr] =  as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]])
+  cl_all@cl$foCatEu6[nr] = as.character(metier_shortcode$short_code[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]]) 
+  
+} else {
+  print(paste("NOT FOUND: ", cl_all@cl$foCatEu6[nr]))
+}
+} 
+  
+   for (nr in 1:nrow(cs_all@hh)) {
+   if ( length(as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]]) ) >0) {
+cs_all@hh$foCatEu5[nr] =  as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]])
+  cs_all@hh$foCatEu6[nr] =   as.character(metier_shortcode$short_code[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]])
+   } else {
+   print(paste("NOT FOUND: ", cs_all@hh$foCatEu6[nr]))    
+   } 
+   } 
+
+
+elements <- c("space",	"time",	"technical", "commercial_category")
+  
+  col_ele_var1 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[1] ]) 
+ col_ele_var2 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[2] ])  
+ col_ele_var3 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[3] ]) 
+ # col_ele_var4 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[4] ]) 
+ 
+
+```
+
+Input
+
+*CS COST object*
+
+```{r input1}
+
+head(cs_all@tr)
+head(cs_all@hh)
+head(cs_all@sl)
+head(cs_all@hl)
+head(cs_all@ca)
+
+```
+
+*Short codes for metiers*
+
+```{r input2}
+
+head(metier_shortcode)
+
+```
+
+*Stratification table*
+
+```{r input3}
+
+table_strat_res
+
+```
+
+
+INVESTIGATE DATA FOR THE SELECTED SPECIES
+
+*Calculation of the CV in the past sampling*
+
+```{r data2}
+ 
+ ## ------------------------------------------ ##
+ ## INVESTIGATE DATA FOR THE TARGET SPECIES
+ ## ------------------------------------------ ##
+
+res_dir <- paste(results_path, "/04_dataInvestigation", sep="")
+
+dir.create(res_dir)
+
+for (this_spe in 1:length( target_SPECIES)) {
+  sppName <-  target_SPECIES[[this_spe]]
+  sppShortCode <- names(target_SPECIES)[this_spe]
+    
+cl_spe <<-  subset(cl_all, taxon == sppName, link = TRUE) 
+cs_spe <<- try(subsetSpp(cs_all, spp == sppName, link = TRUE), silent=TRUE) 
+
+stratification <<- strIni()
+
+for (ye in 1:length(years)) {
+ 
+   print(paste("Investigate data for", years[ye], sppName ,"in progress...") , quote=F)  
+  
+  cl0 = cl_spe
+  cs0 = cs_spe
+  
+   cs_ye = try(subset(cs0, year == years[ye], table = "tr", link=TRUE)  , silent=TRUE)
+  cl_ye = subset(cl0, year == years[ye], link=TRUE) 
+ 
+if(!is.na(cs_ye@hl$spp[1]) ) {
+  # % samples
+  hsl = merge(cs_ye@hh, cs_ye@hl)
+  
+
+ hsl$SampQuarter <-  quarter(hsl$date) 
+  hsl$SampSemester <- ifelse(quarter(hsl$date) == 1 | quarter(hsl$date) == 2, 1, 2)
+ 
+ cl_temp <- cl_ye 
+
+ cl_temp@cl$semester <- 1
+ cl_temp@cl$semester[cl_temp@cl$quarter %in% c(3, 4)] <- 2
+ 
+ 
+switch(col_ele_var1,
+    GSA={ 
+    AggregationList <- list(hsl$area)
+    AggregationList_lan <- list(cl_temp@cl$area)
+    },
+    Country={ 
+    AggregationList <- list(hsl$vslFlgCtry)
+    AggregationList_lan <- list(cl_temp@cl$vslFlgCtry)
+    },
+    ALL = { 
+    AggregationList <-  list(rep("ALL", length(hsl$area) ) )
+    AggregationList_lan <-  list(rep("ALL", length(cl_temp@cl$area) ) ) 
+    },
+    stop("Enter something that switches me!")
+)
+
+switch(col_ele_var2,
+    Q = { 
+    AggregationList <- c(AggregationList, list(hsl$SampQuarter) )
+    AggregationList_lan <- c(AggregationList_lan, list(cl_temp@cl$quarter) )
+    },
+    S = { 
+    AggregationList <- c(AggregationList, list(hsl$SampSemester) )
+    AggregationList_lan <- c(AggregationList_lan, list(cl_temp@cl$semester) )
+    },
+    Y = { 
+    AggregationList <- c(AggregationList, list(rep(1, length(hsl$SampSemester) ) ))
+    AggregationList_lan <- c(AggregationList_lan, list(rep(1, length(cl_temp@cl$semester) ) ) )
+    },
+    stop("Enter something that switches me!")
+)
+
+switch(col_ele_var3,    
+    lev6 = {  
+    AggregationList <- c(AggregationList, list(hsl$foCatEu6) )
+    AggregationList_lan <- c(AggregationList_lan, list(cl_temp@cl$foCatEu6) )
+    },
+    lev4 = {  
+    AggregationList <- c(AggregationList, list(hsl$foCatEu5) )
+     AggregationList_lan <- c(AggregationList_lan, list(cl_temp@cl$foCatEu5) )
+    },
+    NONE = { 
+    
+#     if (col_ele_var4 == "N") {
+#     AggregationList <- c(AggregationList, list(rep(1, length(hsl$SampSemester) ) ))
+#     AggregationList_lan <- c(AggregationList_lan, list(rep(1, length(cl_temp@cl$semester) ) ) )
+#     }
+    
+     print("Sampling with ALL metiers")
+    },
+    stop("Enter something that switches me!")
+)
+
+
+
+# switch(col_ele_var4,    
+#     Y = {  
+#     AggregationList <- c(AggregationList, list(hsl$commCat) )
+#      AggregationList_lan <- c(AggregationList_lan, list(cl_temp@cl$commCat) )
+#     },
+#     N = { 
+#     print(paste("Sampling by", col_ele_var3) )
+#     },
+#     stop("Enter something that switches me!")
+# )
+
+
+ 
+  tabsamp = aggregate(hsl$lenNum, by = AggregationList, sum)
+  # tabsamp
+  # remove rows without stratum information
+  ind = which(tabsamp$Group.1 == "" | tabsamp$Group.2 == "" | tabsamp$Group.3 == "")
+  if(length(ind) != 0){
+    tabsamp = tabsamp[-ind,]
+  }
+  # rates
+  tabsamp$sampling = tabsamp$x / sum(tabsamp$x) * 100
+  # % landings
+  
+  
+  
+  tabland = aggregate(cl_ye@cl$landWt, by = AggregationList_lan, sum)
+  # remove rows without stratum information
+  ind = which(tabland$Group.1 == "" | tabland$Group.2 == ""  | tabland$Group.3 == "")
+  if(length(ind) != 0) {
+    tabland = tabland[-ind,]
+  }
+  # rates
+  tabland$landings = tabland$x / sum(tabland$x) * 100
+
+  tab = merge(tabsamp, tabland, by= c("Group.1", "Group.2", "Group.3"), all = TRUE)
+  tab$year = years[ye]
+  
+  ## NA
+  tab$sampling[is.na(tab$sampling)] = 0
+  tab$landings[is.na(tab$landings)] = 0
+  
+  
+  colnames(tab)[1:3] = c("Var1", "Var2", "Var3")
+  
+  poinByStr <- tab[1:3]
+ poinByStr$sampSize <- -1
+ poinByStr$nMeasTotal <- -1 
+ poinByStr$MeanNmeasByStr <- -1
+ poinByStr$nOtherSp <- -1 
+ poinByStr$cv <- -1
+  
+   for (nr in 1:nrow(tab)) {
+      loc_case = tab[nr,1:3]
+      
+  # subset by area 
+  
+switch(col_ele_var1,
+    GSA={ CSstr1 = try(subsetCOST(cs_ye, area %in% loc_case$Var1, table = "hh"), silent=TRUE)
+    },
+    Country={ CSstr1 = try(subsetCOST(cs_ye,  vslFlgCtry %in% loc_case$Var1, table = "hh") , silent = TRUE)
+    },
+    ALL = { CSstr1 = cs_ye
+    },
+    stop("Enter something that switches me!")
+)
+
+    
+switch(col_ele_var2,
+    Q = { CSstr2 = try(subsetCOST(CSstr1,  quarter(CSstr1@hh$date)  %in% loc_case$Var2, table = "hh"), silent = TRUE)
+    },
+    S = { CSstr2 = try(subsetCOST(CSstr1,  ifelse(quarter(CSstr1@hh$date) == 1 | quarter(CSstr1@hh$date) == 2, 1, 2) %in% loc_case$Var2, table = "hh"), silent = TRUE)
+    },
+    Y = { CSstr2 = CSstr1
+    },
+    stop("Enter something that switches me!")
+)
+
+switch(col_ele_var3,    
+    lev6 = { CSstr3 = try(subsetCOST(CSstr2,  foCatEu6 %in% loc_case$Var3, table = "hh") , silent = TRUE)
+    },
+    lev4 = { CSstr3 = try(subsetCOST(CSstr2,  foCatEu5 %in% loc_case$Var3, table = "hh") , silent = TRUE)
+    },
+    NONE = {  
+    
+     if (col_ele_var4 == "N") {
+        CSstr3 = CSstr2
+        }
+    },
+    stop("Enter something that switches me!")
+)
+
+# switch(col_ele_var4,    
+#     Y = { CSstr4 = try(subsetCOST(CSstr2,  commCat %in% loc_case$Var4, table = "hh"), silent = TRUE)
+#     },
+#     N = { CSstr4 = CSstr3
+#     },
+#     stop("Enter something that switches me!")
+# )
+
+    head(CSstr3) 
+    
+    # sample size
+    if(all(!is.na(CSstr3@hl$trpCode))){
+      poinByStr$sampSize[nr] = length(unique(CSstr3@hl$trpCode))
+    } else {
+      poinByStr$sampSize[nr] = 0
+      }
+
+    
+    # total number of measures
+    poinByStr$nMeasTotal[nr] = sum(CSstr3@hl$lenNum, na.rm = TRUE)
+    
+    # mean number of measures by sample (trip code)
+    if (poinByStr$sampSize[nr] != 0) {
+      poinByStr$MeanNmeasByStr[nr] = round(poinByStr$nMeasTotal[nr] / poinByStr$sampSize[nr], 0)
+    } else {
+      poinByStr$MeanNmeasByStr[nr] = 0
+      }
+    
+  
+    # cv
+    CSvalstr = csDataVal(CSstr3)
+    CLvaly = clDataVal(cl_ye)
+    CSconsstr = csDataCons(CSvalstr, stratification)
+    CLconsy = clDataCons(CLvaly, stratification)
+    dbeOutputy = dbeObject(desc = sppName, species = sppName, catchCat = "Lan",
+                           strataDesc = stratification, methodDesc = "analytical")
+    # compute cv
+    raisingy =  try(RaiseLgth(dbeOutputy, CSconsstr, CLconsy,
+                              spp = sppName, taxon = sppName, strDesc = stratification), silent = TRUE)
+    
+    if(class(raisingy) != "try-error"){
+      poinByStr$cv[nr] = raisingy@lenNum$DCRcvIndicator
+    } else {
+      poinByStr$cv[nr] = NA
+      }
+
+   } 
+    
+  if (!exists("tab2") ) {
+   tab2 = merge(tab, poinByStr) 
+   colnames(tab2) <- c( "Var1", "Var2", "Var3", "x.x", "sampling", "x.y", "landings", "year", "sampSize", "nMeasTotal", "MeanNmeasByStr", "nOtherSp", "cv")
+    tab2$Species <- sppName
+ } else {
+   to_add <-  merge(tab, poinByStr)
+ colnames(to_add) <- c( "Var1", "Var2", "Var3", "x.x", "sampling", "x.y", "landings", "year", "sampSize", "nMeasTotal", "MeanNmeasByStr", "nOtherSp", "cv")
+ to_add$Species <- sppName
+   tab2 = rbind(tab2, to_add )
+ }
+
+  
+ # if (!exists("pastSituations")) {
+   pastSituations = tab2 
+   
+#print(pastSituations)
+ # } else {
+ #   pastSituations = rbind(pastSituations, tab2)
+ # }
+  
+}
+}
+
+}
+
+
+```
+
+Past situation
+
+```{r data3}
+
+
+pastSituations <- pastSituations[, colnames(pastSituations) != "nOtherSp"]
+ write.table(pastSituations, file=paste( res_dir, "/Past situation.csv", sep=""), sep=";", row.names=F, na="")
+ 
+pastSituations
+ 
+```
+
+Sampling vs Landings plot from past situation
+
+```{r data4} 
+ 
+
+
+ ## ------------------------------------------ ##
+ # SAVE GRAPHS from past situation
+ ## ------------------------------------------ ## 
+
+for (this_spe in 1:length(target_SPECIES)) {
+  
+  sppName <- target_SPECIES[[this_spe]]
+  sppShortCode <- names(target_SPECIES)[this_spe]
+
+  pastSituations_spe <- pastSituations[pastSituations$Species == sppName , ]
+  
+   vect_met <- unique(pastSituations_spe$Var3)
+   
+    for (met in 1:length(vect_met) ) {
+   pastSituations_spe_met <-  pastSituations_spe[pastSituations_spe$Var3 == vect_met[met], ]
+     
+   windows(height=10, width=8)
+   
+file_name <- paste( res_dir, "/", sppShortCode," - ", vect_met[met], 
+                   " - Sampling vs Landing.jpg", sep="") 
+plot_title <- paste(sppName , " - ",vect_met[met], " - Sampling vs Landings", sep="") 
+   
+   ggplot(pastSituations_spe_met) + 
+     geom_point(pastSituations_spe_met, mapping=aes(y=sampling, x=landings, col = as.factor(year)), size = 2)+
+     geom_abline(intercept = 0, slope = 1, size = 0.2)+
+     theme(axis.text.x = element_text(size=7), axis.text.y = element_text(size=7))+
+     facet_grid(Var1 ~ Var2, scales='fixed')+
+     theme(legend.title=element_blank(), legend.position="top")+
+     labs(y = "% Sampling", x = "% Landings")+
+     ylim(0, ceiling(max(pastSituations_spe_met$sampling, pastSituations_spe_met$landings)))+
+     xlim(0, ceiling(max(pastSituations_spe_met$sampling, pastSituations_spe_met$landings)))  + ggtitle( plot_title)
+   ggsave(file_name, last_plot(), width=8, height=10)  
+  }
+   
+ graphics.off()
+ 
+}
+```
+
+Landings by year-quarter-foCatEu6
+
+```{r data5} 
+ ## ------------------------------------------ ##
+ ## SAVE GRAPHS of Landings
+ ## ------------------------------------------ ## 
+
+  file_name <- paste(res_dir, "/Landings by year-quarter-foCatEu6.csv", sep="") 
+
+ tab <- aggregate(cl_all@cl$landWt,by=list(cl_all@cl$area, cl_all@cl$taxon, cl_all@cl$quarter, cl_all@cl$year, cl_all@cl$foCatEu6),sum,na.rm=TRUE)
+ colnames(tab) <- c("Area", "Species", "Quarter",  "Year" ,  "foCatEu6", "Value")
+  write.table(tab, file_name , sep=";", row.names=F, na="")
+
+  print("Landings by year, quarter and foCatEu6 successfully saved!", quote=F)
+ print("***************************************************************************") 
+ 
+ 
+ for (gs in 1:length(gsas)) {
+   tab_this_gsa <- tab[tab$Area == gsas[gs],]
+   tab_this_gsa$Value <- tab_this_gsa$Value/1000
+    # Quarter Year foCatEu6 Prod (kg)
+ file_name <- paste( res_dir, "/Landings by year-quarter-foCatEu6 " ,gsas[gs]," .jpg", sep="") 
+plot_title <- paste("Landings (tons) by foCatEu6", gsas[gs])
+ 
+ ggplot(tab_this_gsa, aes(x = Year, y = Value, fill=as.factor(Quarter))) + geom_bar(stat="identity", position="dodge") + ggtitle(plot_title) +  facet_grid(Species ~ foCatEu6, scales='fixed')
+ 
+ ggsave(file=file_name, last_plot(), width=10, height=6)
+ try(dev.off(), silent=TRUE)
+ }
+
+```
+ 
+Landings by year-quarter-foCatEu6
+
+```{r data6}  
+ 
+## ------------------------------------------ ##
+ ## SAVE NO of samples from past situation
+ ## ------------------------------------------ ## 
+
+ T_final <- data.frame() 
+
+ for (this_spe in 1:length(target_SPECIES)) {
+   
+  sppName <- target_SPECIES[[this_spe]]
+    sppShortCode <- names(target_SPECIES)[this_spe]
+
+  cl_spe <<-  subset(cl_all, taxon == sppName, link = TRUE)
+cs_spe <<- try(subsetSpp(cs_all, spp == sppName, link = TRUE) , silent=TRUE)
+
+
+
+ hsl <- merge(cs_spe@hh, cs_spe@sl)
+ y <- unique(hsl$year)
+gsas <- unique(hsl$area)
+ 
+ for (gs in 1:length(gsas)) {
+ hslgs <- hsl[which(hsl$area==gsas[gs]),]
+   
+ for (i in 1:length(y)) {
+   hsly <- hslgs[which(hslgs$year==y[i]),]
+   
+   t_1 <- data.frame(tapply(hsly$commCat, list(hsly$foCatEu6, quarter(hsly$date)), length))
+   
+   if (nrow(t_1) != 0) {
+      colnames(t_1) <- unique(quarter(hsly$date))[order(unique(quarter(hsly$date)))]
+   rownames(t_1) <- paste(as.character(y[i]),rownames(t_1))
+   
+   to_add <- which(!c(1:4) %in%  unique(quarter(hsly$date)))
+   
+   if (length(to_add) != 0) {     
+     ad <- data.frame(matrix(0, ncol=length(to_add), nrow=nrow(t_1)))
+     colnames(ad) <- to_add
+     t_1 <- cbind(t_1,ad)
+     t_1 <- t_1[, order(colnames(t_1))]
+   }   
+
+      t_1 <- data.frame(cbind(as.character(gsas[gs]), cbind(as.character(y[i]), cbind( substring(rownames(t_1), 6, nchar(rownames(t_1))), cbind(sppName, t_1)))))
+   colnames(t_1)[1:4] <- c("Area", "Year", "Metier", "Species")
+   
+   T_final <- rbind(T_final, t_1)
+   
+     
+   }
+  
+ } # close area
+  
+ } #close year 
+
+ } # close species
+
+ tab1 <- data.frame(Area=T_final$Area,Year=T_final$Year, Metier=T_final$Metier, Species=T_final$Species, SQ1=T_final[,5], SQ2=T_final[,6], SQ3=T_final[,7],  SQ4=T_final[,8])
+
+## ------------------------------------------ ##
+ ## SAVE NO of individuals from past situation
+ ## ------------------------------------------ ## 
+ 
+  T_final2 <- data.frame() 
+
+ for (this_spe in 1:length(target_SPECIES)) {
+  sppName <- target_SPECIES[[this_spe]]
+    sppShortCode <- names(target_SPECIES)[this_spe]
+
+  cl_spe <<-  subset(cl_all, taxon == sppName, link = TRUE)
+cs_spe <<- try( subsetSpp(cs_all, spp == sppName, link = TRUE), silent=TRUE) 
+
+ hsl2 <- merge(cs_spe@hh, cs_spe@hl)
+ 
+ y <- unique(hsl2$year)
+gsas <- unique(hsl2$area)
+ 
+ for (gs in 1:length(gsas)) {
+ hslgs <- hsl2[which(hsl2$area==gsas[gs]),]
+   
+ for (i in 1:length(y)) {
+   hsl2y <- hslgs[which(hslgs$year==y[i]),]
+   
+   t_2 <- data.frame(tapply(hsl2y$lenNum, list(hsl2y$foCatEu6, quarter(hsl2y$date)), sum))
+   
+      if (nrow(t_2) != 0) {
+   colnames(t_2) <- unique(quarter(hsl2y$date))[order(unique(quarter(hsl2y$date)))]
+   rownames(t_2) <- paste(as.character(y[i]),rownames(t_2))
+   to_add <- which(!c(1:4) %in%  unique(quarter(hsl2y$date)))
+   if (length(to_add) != 0) {     
+     ad <- data.frame(matrix(0, ncol=length(to_add), nrow=nrow(t_2)))
+     colnames(ad) <- to_add
+     t_2 <- cbind(t_2,ad)
+     t_2 <- t_2[, order(colnames(t_2))]
+   }
+   
+ t_2 <- data.frame(cbind(as.character(gsas[gs]), cbind(as.character(y[i]), cbind( substring(rownames(t_2), 6, nchar(rownames(t_2))), cbind(sppName, t_2)))))
+   colnames(t_2)[1:4] <- c("Area", "Year", "Metier", "Species")
+   
+   T_final2 <- rbind(T_final2,t_2)
+      }
+ } # close area
+ 
+   } # close year
+ 
+ } # close species
+
+ tab2 <- data.frame(Area=T_final2$Area, Year=T_final2$Year, Metier=T_final2$Metier, Species=T_final2$Species, NQ1=T_final2[,5], NQ2=T_final2[,6], NQ3=T_final2[,7],  NQ4=T_final2[,8])
+ 
+ ## ------------------------------------------ ##
+ ## SAVE NO of trips from past situation
+ ## ------------------------------------------ ## 
+ 
+  tab_TRIP <- tab2
+
+ no_trips_mat <- cs_all@hh
+ 
+ no_trips_mat$ quarter <-  quarter(no_trips_mat$date)
+ 
+ no_trips_mat <- with(no_trips_mat, aggregate(year, by =list(area, year, foCatEu6, quarter, trpCode ), FUN="length") )
+ colnames(no_trips_mat) <- c("area", "year", "foCatEu6", "quarter", "trpCode", "x")
+ 
+ no_trips_mat_2 <- with(no_trips_mat, aggregate(year, by =list(area, year, foCatEu6, quarter ), FUN="length") )
+ colnames(no_trips_mat_2) <- c("area", "year", "foCatEu6", "quarter", "no_trips")
+ 
+ for (nr in 1:nrow(no_trips_mat_2)) {
+   if (no_trips_mat_2$ quarter[nr] == 1) {
+     tab_TRIP[tab_TRIP$Area == no_trips_mat_2$area[nr] & tab_TRIP$Year == no_trips_mat_2$year[nr] & tab_TRIP$Metier == no_trips_mat_2$foCatEu6[nr], 5] <- no_trips_mat_2$no_trips[nr]
+   } else if (no_trips_mat_2$ quarter[nr] == 2) {
+     tab_TRIP[tab_TRIP$Area == no_trips_mat_2$area[nr] & tab_TRIP$Year == no_trips_mat_2$year[nr] & tab_TRIP$Metier == no_trips_mat_2$foCatEu6[nr], 6] <- no_trips_mat_2$no_trips[nr]
+   } else if (no_trips_mat_2$ quarter[nr] == 3) {
+     tab_TRIP[tab_TRIP$Area == no_trips_mat_2$area[nr] & tab_TRIP$Year == no_trips_mat_2$year[nr] & tab_TRIP$Metier == no_trips_mat_2$foCatEu6[nr], 7] <- no_trips_mat_2$no_trips[nr]
+   } else if (no_trips_mat_2$ quarter[nr] == 4) {
+     tab_TRIP[tab_TRIP$Area == no_trips_mat_2$area[nr] & tab_TRIP$Year == no_trips_mat_2$year[nr] & tab_TRIP$Metier == no_trips_mat_2$foCatEu6[nr], 8] <- no_trips_mat_2$no_trips[nr]
+   }
+ }
+ 
+ colnames(tab_TRIP) <- c("Area", "Year", "Metier", "Species", "TQ1", "TQ2", "TQ3", "TQ4")
+ tab0 <- merge(tab_TRIP, merge(tab1,tab2))
+ index_ <- which(is.na(tab0[,]) , arr.ind = TRUE)
+ 
+ if (nrow(index_) > 0 ){
+   for (ind in 1:nrow(index_)) {
+     tab0[index_[ind,1], index_[ind,2]] <- 0
+   }
+ }
+ 
+ tab0[,5:16] <- round( tab0[,5:16],0)
+ 
+ tab0$annualT <- rowSums(tab0[, 5:8])
+ tab0$annualS <- rowSums(tab0[, 9:12])
+ tab0$annualN <- rowSums(tab0[, 13:16])
+ 
+ file_name <- paste( res_dir, "/No. of trips-samples-measures.csv", sep="") 
+ write.table(tab0,  file_name, row.names=F, sep=";", na="")
+
+ print("Trips, samples and measures for the past successfully saved!", quote=F)
+ print("***************************************************************************") 
+
+```  
+ 
+ Weight by trip from past situation
+ 
+```{r data7}
+ ## ------------------------------------------ ##
+ ## SAVE graphs of weight by trip from past situation
+ ## ------------------------------------------ ## 
+ 
+ for (this_spe in 1:length(target_SPECIES) ) {
+  sppName <- target_SPECIES[[this_spe]]
+    sppShortCode <- names(target_SPECIES)[this_spe]
+
+  cs_spe <<- try(subsetSpp(cs_all, spp == sppName, link = TRUE) , silent=TRUE)
+  
+#  cs_spe@hl$landCat <- "HUC"
+#  cs_spe@hl$commCatScl <- "EU"
+#  
+#  #CSsp@sl$commCat  <- ""
+
+#  CSsp@sl$sex <- ""
+#  
+#  #CSsp@hl$commCat  <- ""
+
+ 
+for (gs in gsas) { 
+
+ for (ye in years) {
+    print(paste("Saving weight by trip for", sppName, gs, ye, "..."))
+   # We start to look at the sample weight by trip, metier and quarter. 
+   ##=============================##
+   
+plot_path <- paste( res_dir, "/",sppShortCode," - Sample weight by trip-metier-quarter ", ye," - ", gs, ".jpg", sep="") 
+     
+    myCSsub <- try(subset(cs_spe, year == ye, table="sl", link=TRUE), silent=TRUE) # 
+    myCSsub <- try(subset(myCSsub,  area == gs , table="hh", link=TRUE) , silent=TRUE) # 
+
+    if(!is.na(myCSsub@sl$spp[1]) ) {
+    
+    unique(myCSsub@hh$year)
+   unique(myCSsub@hh$area)
+   unique(myCSsub@sl$spp)
+   
+  # myCSsub_temp =myCSsub
+   
+   #strDates <- myCSsub@hh$date
+   #dates <- as.Date(strDates, "%d/%m/%Y")
+   #myCSsub@hh$date <- dates
+   
+   strD <- strIni( timeStrata="quarter", techStrata="foCatEu6", spaceStrata = "area")     
+   LDVpd <- landisVol(myCSsub,strDef = strD, species=sppName  ) # 
+   
+  # jpeg(file=plot_path, width=36, height=21, bg="white", units="cm",res=200)
+   
+   #par(mar=c(8, 5, 5, 5)) 
+   #boxplot(LDVpd, cex.lab=0.5, rot=20)
+   #try(dev.off() , silent=TRUE)
+    
+   #myCSsub <- myCSsub_temp
+     
+plot_path <- paste( res_dir, "/",sppShortCode," - Consistency sampling vs landings ", ye," - ", gs, ".jpg", sep="") 
+   
+   myCLsub <- subset(cl_all,year==ye & taxon==sppName & area == gs, table="cl")
+   #myCLsub@cl$taxon <- sppName
+   
+   ## VALIDATION
+   ## CS
+   csVal <- csDataVal(myCSsub)
+   ## CL
+   clVal <- clDataVal(myCLsub)
+   ## STRATIFICATION
+   strD <- strIni(timeStrata="quarter",techStrata="foCatEu6")
+   
+   ## Check consistency of sampling/prod
+   CSrel <- relativeValue(csVal, strD, "nbSamp")
+   CLrel <- relativeValue(clVal, strD)
+   
+   jpeg(file=plot_path, width=21, height=27, bg="white", units="cm",res=200)
+   plot(CLrel,CSrel)
+   try(dev.off(), silent=TRUE)
+ 
+    }
+   
+   } # close year
+  
+
+} # close gsa
+
+}
+ 
+```
+ 
+ Investigating variability between samples
+ 
+```{r data8}
+ ## ------------------------------------------ ##
+ ## Investigating variability between samples
+ ## ------------------------------------------ ## 
+
+  for (this_spe in 1:length(target_SPECIES) ) {
+  sppName <- target_SPECIES[[this_spe]]
+    sppShortCode <- names(target_SPECIES)[this_spe]
+
+  cs_spe <<- try(subsetSpp(cs_all, spp == sppName, link = TRUE) , silent=TRUE)
+  
+for (gs in gsas) { 
+     
+myCSsub <- try( subset(cs_spe,  area == gs , table="hh") , silent=TRUE)
+
+   if (!is.na(myCSsub@sl$sampType[1]))  {
+
+plot_path <- paste( res_dir, "/",sppShortCode," - Variability between samples by year - ", gs, ".jpg", sep="") 
+delta_path <- paste( res_dir, "/",sppShortCode," - Variability between samples by year - ", gs, ".csv", sep="") 
+   
+test_hl <- myCSsub@hl 
+
+test_2 <- group_by(test_hl, sampType, year, trpCode, staNum, spp, commCat, sex)
+test_2 <- summarize(test_2, no_lengths= length(sampType))
+
+ strD <- strIni(timeStrata="year")
+
+ deltas <- deltCalc(myCSsub, species=sppName, strDef=strD, method="subsample", strategy="metier")
+ 
+ jpeg(file=plot_path, width=36, height=21, bg="white", units="cm",res=200)
+ par(mar=c(8, 5, 5, 5))                                                                                                                                     
+ plot(deltas)  
+ try(dev.off(), silent=TRUE )
+ 
+ delta_res <- merge(deltas@ outPut$ SampDeltaMat, deltas@ outPut$ DFsamp, by.x=c("samp"), by.y=c("SampNum") )
+ write.table(delta_res, file=delta_path, row.names=F, sep=";", na="")
+
+ plot_path <- paste( res_dir, "/",sppShortCode," - Variability between samples by metier - ", gs, ".jpg", sep="") 
+delta_path <- paste( res_dir, "/",sppShortCode," - Variability between samples by metier - ", gs, ".csv", sep="") 
+
+ strD <- strIni(techStrata="foCatEu6")
+ deltas <- deltCalc(myCSsub,species=sppName,strDef=strD, method="subsample", strategy="metier")
+ 
+ jpeg(file=plot_path, width=36, height=21, bg="white", units="cm",res=200)
+ par(mar=c(8, 5, 5, 5))       
+ plot(deltas) 
+ try(dev.off(), silent=TRUE)
+ 
+ # method="subsample"
+ # Method for calculating delta values. If "delta", samples are raised to haul/trip level. 
+ # If "subsample", samples are considered at sampling level (no raising process).
+ 
+ delta_res <- merge(deltas@ outPut$ SampDeltaMat, deltas@ outPut$ DFsamp, by.x=c("samp"), by.y=c("SampNum") )
+ write.table(delta_res, file=delta_path, row.names=F, sep=";", na="")
+ 
+plot_path <- paste( res_dir, "/",sppShortCode," - Variability between samples by quarter - ", gs, ".jpg", sep="") 
+delta_path <- paste( res_dir, "/",sppShortCode," - Variability between samples by quarter - ", gs, ".csv", sep="") 
+ 
+ strD <- strIni(timeStrata="quarter")
+ 
+  myCSsub_temp =myCSsub
+   
+strDates <- myCSsub@hh$date
+ dates <- as.Date(strDates, "%d/%m/%Y")
+ myCSsub@hh$date <- dates
+ 
+ deltas <- deltCalc(myCSsub,species=sppName,strDef=strD, method="subsample", strategy="metier")
+ jpeg(file=plot_path, width=36, height=21, bg="white", units="cm",res=200)
+ par(mar=c(8, 5, 5, 5))   
+ plot(deltas)  
+ try(dev.off() , silent=TRUE)
+ 
+myCSsub = myCSsub_temp 
+ 
+ delta_res <- merge(deltas@ outPut$ SampDeltaMat, deltas@ outPut$ DFsamp, by.x=c("samp"), by.y=c("SampNum") )
+ write.table(delta_res, file=delta_path, row.names=F, sep=";", na="")
+
+   }
+
+
+  for (anno in years) {
+
+    plot_path <- paste( res_dir, "/",sppShortCode," - Consistency sampling vs landings ", anno," - ", gs, ".jpg", sep="") 
+    
+   myCSsub <- subset(cs_spe , year==anno & area==gs, table="hh")
+   myCLsub <- subset(cl_spe, year==anno & area==gs, table="cl")
+   
+   unique(myCSsub@hh$year)
+   unique(myCLsub@cl$year)
+   
+   unique(myCSsub@hh$area)
+   unique(myCLsub@cl$area)
+   
+   unique(myCSsub@sl$spp)
+   unique(myCLsub@cl$taxon)
+   
+      if (!is.na(myCSsub@sl$spp[1]))  {
+   ## VALIDATION
+   ## CS
+   csVal <- csDataVal(myCSsub)
+   ## CL
+   clVal <- clDataVal(myCLsub)
+   ## STRATIFICATION
+   strD <- strIni(timeStrata="quarter",techStrata="foCatEu6")
+   ## Check consistency of sampling/prod
+   CSrel <- relativeValue(csVal, strD, "nbSamp")
+   CLrel <- relativeValue(clVal, strD)
+
+   jpeg(file=plot_path, width=21, height=27, bg="white", units="cm",res=200)
+   plot(CLrel,CSrel)
+   try(dev.off() , silent=TRUE)
+      }
+   
+  }
+ 
+}
+ }
+ 
+ 
+```
+ 
+ Save lenght distribution plot by trip
+ 
+```{r data9}
+  # ---------------------------------------------------------------- save lenght distribution plot by trip
+ 
+  for (this_spe in 1:length(target_SPECIES) ) {
+  sppName <- target_SPECIES[[this_spe]]
+    sppShortCode <- names(target_SPECIES)[this_spe]
+
+  cs_spe <<- subsetSpp(cs_all, spp == sppName, link = TRUE) 
+  
+ for (gs in gsas) { 
+     
+    for (anno in years) {
+   
+ plot_path <- paste( res_dir, "/",sppShortCode," - Length distribution by trip ", anno," - ", gs, ".jpg", sep="") 
+    
+   myCSsub <- subset(cs_spe , year==anno & area==gs, table="hh")
+   
+     if (!is.na(myCSsub@sl$sampType[1]))  {
+    unique(myCSsub@hh$year)
+   unique(myCSsub@hh$area)
+   unique(myCSsub@sl$spp)
+
+   # plot length distribution 
+   jpeg(file=plot_path, width=46, height=21, bg="white", units="cm",res=200)
+   lenDisPlot(myCSsub,sppName,fraction="LAN",trpCode="all",level="trip")  
+   try(dev.off() , silent=TRUE)
+     }
+   
+ }
+ 
+ 
+ }
+
+
+} # close species
+ 
+
+```

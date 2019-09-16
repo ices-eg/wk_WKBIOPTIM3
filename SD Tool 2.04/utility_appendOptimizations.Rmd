@@ -1,0 +1,157 @@
+---
+title: 'Append optimizations results'
+author: "M.T. Facchini, I. Bitetto (COISPA, Italy)"
+date: '`r date()`'
+output: word_document
+---
+
+
+```{r compil, eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+#just a reminder to how compile a docx doc
+if(F){
+rmarkdown::render("Data.Rmd",c("word_document"))
+}
+```
+
+
+#Tools
+
+R, Rstudio and packages.
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=6,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+
+#load packages
+library(fishPifct)
+library(pander)
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(data.table) 
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(Metrics)
+library(emdist)
+
+# SD Tool v.3 and WKBIOPTIM SimTool v.1  were taken into account for the developement of the present tool.
+# SD tool has been developed in MARE/2014/19 project and updated in MARE/2016/22 project (STREAM)
+
+# The tool is documented in Deliverable D3.3 "Upgrade the methodological framework and tools for sampling optimization, implement and report case studies" (January 2019)
+
+# Authors of the first version of SD Tool: F. Gontrand, T. Rouyer, N. Billet, 2016
+# IFREMER, UMR MARBEC, Avenue Jean Monnet, BP 171, 34203 S` ete, France 
+
+# Authors of the first version of WKBIOPTIM scripts: Nuno Prista (SLU, Sweden) from a subgroup work carried out during a local Workshop on Sampling Design and Optimization (Lysekil, 31 October to 4 November 2016, unpublished)
+# SLU Aqua, Institute of Marine Research, Department of Acquatic Resources - Swedish University of Agricultural Sciences
+
+# Authors of this new tool: M.T. Facchini, I. Bitetto, 2017
+# COISPA Tecnologia & Ricerca, Via dei Trulli 18/20 - (Bari), Italy 
+
+# In case of use of the tool, the Authors should be cited.
+# If you have any comments or suggestions please contact the following e-mail addresses: facchini@coispa.it, bitetto@coispa.it
+# SD Tool is believed to be reliable. However, we disclaim any implied warranty or representation 
+# about its accuracy, completeness or appropriateness for any particular purpose.
+
+
+
+#pander options
+panderOptions('table.split.table', 60)
+panderOptions('table.style', 'grid')
+panderOptions('table.split.cells', 10)
+panderOptions('table.alignment.default', 'left')
+panderOptions('table.alignment.rownames', 'right')
+panderOptions('decimal.mark', ',')
+panderOptions('graph.fontsize', '10')
+
+
+```
+
+
+
+# Run evaluation of performed scenarios 
+
+Script performing a comparison between each performed scenario respect to the baseline 
+
+##Settings 
+
+```{r settings}
+
+# set the working directory
+myWD <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04"
+setwd(myWD)
+
+casestudy_path <-  "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04"
+
+sapply(list.files(pattern="[.]R$", path="SDTfuns/", full.names=TRUE), source);
+
+scenarios_dirs <- list.dirs(path = casestudy_path, recursive=F,  full.names = FALSE)
+
+target_SPECIES <<- list("DPS" = "Parapenaeus longirostris"        )
+
+```
+
+
+*Evaluation of scenarios*
+
+```{r data2}
+
+scenarios_dirs <- scenarios_dirs[str_detect(scenarios_dirs[], "05_optimization") ] 
+
+head_ <- c("Var1", "Var2", "Var3", "min_trips", "max_trips", "mean_RR",  "mean_CV", "no_iterations_in_range", "name", "species") 
+all_optimized_table <- data.frame(matrix("", nrow=0, ncol=length(head_ )))
+ colnames(all_optimized_table) <- head_
+ 
+ head_2 <- c("cv" ,"nMeas","sampSize" , "recyclingRate" ,"Var1",   "Var2", "Var3" , "name", "species")
+all_CVs_table <- data.frame(matrix("", nrow=0, ncol=length(head_2 )))
+ colnames(all_CVs_table) <- head_2
+
+ for (sp in 1:length(target_SPECIES)) {
+   
+   species_name <- names(target_SPECIES[sp])
+
+     file_name = paste(species_name, "- Optimized sample size.csv") 
+        file_name_2 = paste(species_name, "- CV from bootstrap.csv") 
+         
+     
+        scenarios_dirs_spe <- scenarios_dirs[str_detect(scenarios_dirs[], species_name) ] 
+        
+  for (ncs in 1:length(scenarios_dirs_spe)) {
+    
+    optimized_table <-  read.csv(paste(casestudy_path, "/", scenarios_dirs_spe[ncs], "/", file_name, sep=""  ), sep=";")
+    optimized_table$name <- scenarios_dirs_spe[ncs]
+      optimized_table$species <- species_name
+  colnames(optimized_table) <- head_
+  all_optimized_table <- data.frame(rbind(all_optimized_table, optimized_table))   
+  
+  
+   CVs_table <-  read.csv(paste(casestudy_path, "/", scenarios_dirs_spe[ncs], "/", file_name_2, sep=""  ), sep=";")
+    CVs_table$name <- scenarios_dirs_spe[ncs]
+      CVs_table$species <- species_name
+  colnames(CVs_table) <- head_2
+  all_CVs_table <- data.frame(rbind(all_CVs_table, CVs_table))
+  
+ }
+ }
+ 
+
+ 
+ all_optimized_table <- all_optimized_table[with(all_optimized_table, order( Var1, Var3 , Var2, name)), ]
+ 
+  all_CVs_table <- all_CVs_table[with(all_CVs_table, order( Var1, Var3 , Var2, name)), ]
+  
+ 
+ 
+ write.table(all_optimized_table, file=paste(casestudy_path, 
+        "/All optimizations.csv", sep=""), sep=";", row.names=F)
+ 
+  write.table(all_CVs_table, file=paste(casestudy_path, 
+        "/All CVs.csv", sep=""), sep=";", row.names=F)
+  
+```
+

@@ -1,0 +1,7 @@
+Var1;Var2;Var3;solutions;maxCV;minCV;maxRR;minRR;meanRR;noIterations;min_max
+GSA99;1;OTB_DEF;11;0.33;0.2;0.11;0;0.03;7;min
+GSA99;1;OTB_DEF;17;0.22;0.18;0.2;0;0.13;5;max
+GSA99;1;OTB_DWS;10;0.21;0.21;0.4;0.4;0.4;1;min
+GSA99;1;OTB_DWS;11;0.11;0.11;0.45;0.45;0.45;1;max
+GSA99;1;OTB_MDD;17;0.25;0.08;0.41;0.08;0.31;11;min
+GSA99;1;OTB_MDD;22;0.17;0.12;0.52;0.33;0.42;6;max

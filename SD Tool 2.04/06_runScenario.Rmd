@@ -1,0 +1,579 @@
+---
+title: "SDTool (STREAM project): Run Scenarios"
+author: "M.T. Facchini, I. Bitetto (COISPA, Italy)"
+date: '`r date()`'
+output: word_document
+---
+
+
+```{r compil, eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+#just a reminder to how compile a docx doc
+if(F){
+rmarkdown::render("Data.Rmd",c("word_document"))
+}
+```
+
+
+#Tools
+
+R, Rstudio and packages.
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+
+
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=6,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+
+#load packages
+library(fishPifct)
+library(pander)
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(data.table) 
+library(lubridate)
+
+# SD Tool v.3 and WKBIOPTIM SimTool v.1  were taken into account for the developement of the present tool.
+# SD tool has been developed in MARE/2014/19 project and updated in MARE/2016/22 project (STREAM)
+
+# The tool is documented in Deliverable D3.3 "Upgrade the methodological framework and tools for sampling optimization, implement and report case studies" (January 2019)
+
+# Authors of the first version of SD Tool: F. Gontrand, T. Rouyer, N. Billet, 2016
+# IFREMER, UMR MARBEC, Avenue Jean Monnet, BP 171, 34203 S` ete, France 
+
+# Authors of the first version of WKBIOPTIM scripts: Nuno Prista (SLU, Sweden) from a subgroup work carried out during a local Workshop on Sampling Design and Optimization (Lysekil, 31 October to 4 November 2016, unpublished)
+# SLU Aqua, Institute of Marine Research, Department of Acquatic Resources - Swedish University of Agricultural Sciences
+
+# Authors of this new tool: M.T. Facchini, I. Bitetto, 2017
+# COISPA Tecnologia & Ricerca, Via dei Trulli 18/20 - (Bari), Italy 
+
+# In case of use of the tool, the Authors should be cited.
+# If you have any comments or suggestions please contact the following e-mail addresses: facchini@coispa.it, bitetto@coispa.it
+# SD Tool is believed to be reliable. However, we disclaim any implied warranty or representation 
+# about its accuracy, completeness or appropriateness for any particular purpose.
+
+
+#pander options
+panderOptions('table.split.table', 60)
+panderOptions('table.style', 'grid')
+panderOptions('table.split.cells', 10)
+panderOptions('table.alignment.default', 'left')
+panderOptions('table.alignment.rownames', 'right')
+panderOptions('decimal.mark', ',')
+panderOptions('graph.fontsize', '10')
+
+
+# ATTENTION!!!
+# BEFORE STARTING RUN THE CODE FIX THE BUG IN THE COST FUNCTION RUNNING THE FOLLOWING CODE:
+
+fixInNamespace(spdAgreg, pos="package:COSTdbe")
+
+# WHEN THE WINDOWS APPEARS, replace the line 8 with the following code:
+###############################################   val <- paste(unlist(BY), collapse = ":-:")
+
+```
+
+
+
+# Run scenario 
+
+Script performing scenario according a predefined sampling scheme and sharing of trips 
+
+
+##Settings 
+
+```{r settings}
+
+# set the working directory
+myWD <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04"
+setwd(myWD)
+
+results_path <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04" 
+
+sapply(list.files(pattern="[.]R$", path="SDTfuns/", full.names=TRUE), source);
+
+path_CL <- paste(results_path, "/input files/costCL.rds", sep="")
+path_CS <- paste(results_path, "/input files/costCS.rds", sep="")
+
+path_metier_shortcode <<- paste(results_path, "/input files/metier_shortcode.csv", sep="")
+
+# Set the absolute path of the file where the level of aggregation of the results is set
+path_table_strat_results <<- paste(results_path, "/input files/05_1_stratification_results.csv", sep="")
+
+# Set the absolute path of the file where definition of the stratification of the sampling you want to reconstruct is set, e.g. random sampling in each stratum defined by GSA, year, level6
+path_table_sampling_definition <<-  paste(results_path, "/input files/06_1_sampling_design_definition.csv", sep="")
+
+# Set the absolute path of the file where allocation of trips in the given sampling scheme is set
+path_table_trips_sharing <<- paste(results_path, "/input files/06_2_sampling_design_trips_sharing.csv", sep="")
+
+# Set the absolute path of the file where the subsample factors and the thresholds are defined by stratum
+path_table_subsamples <<- paste(results_path, "/input files/06_3_subsample_definition.csv", sep="")
+
+path_table_NO_TRIPS_4_BOOTSTRAP <<- paste(results_path, "/input files/06_4_NO_TRIPS_4_BOOTSTRAP.csv", sep="")
+
+SHORT_CASE_STUDY_NAME  <<- "Baseline"
+
+ target_SPECIES <<- list("DPS" = "Parapenaeus longirostris"                    )
+
+nIter <<- 100
+
+THRESHOLD_TOLERANCE <<- 0.05
+
+cl_all <- readRDS(path_CL)
+cs_all <- readRDS(path_CS)
+
+cs_all@tr$trpCode <- paste(cs_all@tr$trpCode , cs_all@tr$year, sep="_")
+cs_all@hh$trpCode <- paste(cs_all@hh$trpCode , cs_all@hh$year, sep="_")
+cs_all@sl$trpCode <- paste(cs_all@sl$trpCode , cs_all@sl$year, sep="_")
+cs_all@hl$trpCode <- paste(cs_all@hl$trpCode , cs_all@hl$year, sep="_")
+cs_all@ca$trpCode <- paste(cs_all@ca$trpCode , cs_all@ca$year, sep="_")
+
+metier_shortcode <<- read.csv(path_metier_shortcode, sep=";")
+table_strat_res <<- read.csv(path_table_strat_results, sep=";")
+table_sampling_def <<-  read.csv(path_table_sampling_definition, sep=";")
+table_trips_sharing <<- read.csv(path_table_trips_sharing, sep=";")
+table_subsamples <<- read.csv(path_table_subsamples, sep=";")
+
+table_NO_TRIPS_4_BOOTSTRAP <<- read.csv(path_table_NO_TRIPS_4_BOOTSTRAP, sep=";")
+
+years <- unique(cs_all@tr$year)
+years <- years[order(years)]
+
+gsas <- unique(cs_all@hh$area)
+
+head(cs_all@tr)
+head(cs_all@hh)
+head(cs_all@sl)
+head(cs_all@hl)
+head(cs_all@ca)
+
+# strDates <- cs_all@hh$date
+# dates <- as.Date(strDates, "%d/%m/%Y")
+# cs_all@hh$date <- dates
+  
+cs_all@hh$foVal <- "V"
+
+cs_all@sl$landCat <- "HUC"
+cs_all@hl$landCat <- "HUC"
+
+cs_all@sl$subSampCat  <- ""
+cs_all@hl$subSampCat  <- ""
+
+cs_all@sl$catchCat <- toupper(cs_all@sl$catchCat) 
+cs_all@hl$catchCat <- toupper(cs_all@hl$catchCat) 
+cs_all@ca$catchCat <- toupper(cs_all@ca$catchCat)
+
+
+dir.create(results_path)
+
+for (nr in 1:nrow(cl_all@cl)) {
+  if (length(as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]]) ) > 0) {
+       cl_all@cl$foCatEu5[nr] =  as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]])
+  cl_all@cl$foCatEu6[nr] = as.character(metier_shortcode$short_code[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]]) 
+  
+} else {
+  print(paste("NOT FOUND: ", cl_all@cl$foCatEu6[nr]))
+}
+} 
+  
+   for (nr in 1:nrow(cs_all@hh)) {
+   if ( length(as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]]) ) >0) {
+cs_all@hh$foCatEu5[nr] =  as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]])
+  cs_all@hh$foCatEu6[nr] =   as.character(metier_shortcode$short_code[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]])
+   } else {
+   print(paste("NOT FOUND: ", cs_all@hh$foCatEu6[nr]))    
+   } 
+   } 
+
+elements <- c("space",	"time",	"technical", "commercial_category")
+  
+col_ele_var1 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[1] ]) 
+ col_ele_var2 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[2] ])  
+ col_ele_var3 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[3] ]) 
+ # col_ele_var4 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[4] ]) 
+ 
+
+LengthStr_dataframe <<- data.frame(matrix(nrow=0, ncol=7))    
+colnames(LengthStr_dataframe) = c("species", "iteration",  "Var1", "Var2", "Var3", "length", "value")
+
+CVbyLength_dataframe <<- data.frame(matrix(nrow=0, ncol=7))    
+colnames(CVbyLength_dataframe) = c("species", "iteration",  "Var1", "Var2", "Var3", "length", "CV")
+
+# bootstrapped_HL_reduced2 <<- data.frame(matrix(nrow=0, ncol=(4+ncol(cs_all@hl)) ))  
+# colnames(bootstrapped_HL_reduced2) = c("iteration",  "Var1", "Var2", "Var3", colnames(cs_all@hl))
+
+global_case <<- NULL
+
+```
+
+Input
+
+*CS COST object*
+
+```{r input1}
+
+head(cs_all@tr)
+head(cs_all@hh)
+head(cs_all@sl)
+head(cs_all@hl)
+head(cs_all@ca)
+
+```
+
+*Short codes for metiers*
+
+```{r input2}
+
+head(metier_shortcode)
+
+```
+
+*Stratification table*
+
+```{r input3}
+
+table_strat_res
+
+```
+
+*Calculation of the CV in the past sampling*
+
+```{r data2}
+
+res_dir <- paste("06_", SHORT_CASE_STUDY_NAME, sep="")
+
+dir.create(paste(results_path, "/06_", SHORT_CASE_STUDY_NAME, sep=""))
+
+  # elements <<- c("space",	"time",	"technical", "commercial_category")
+    elements <<- c("space",	"time",	"technical")
+
+
+ col_ele_var1 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[1] ]) 
+ col_ele_var2 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[2] ])  
+ col_ele_var3 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[3] ]) 
+ # col_ele_var4 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[4] ]) 
+ 
+ SD_var1 <<-  as.character(table_sampling_def[1,colnames(table_sampling_def) == elements[1] ]) 
+ SD_var2 <<-  as.character(table_sampling_def[1,colnames(table_sampling_def) == elements[2] ]) 
+ SD_var3 <<-  as.character(table_sampling_def[1,colnames(table_sampling_def) == elements[3] ]) 
+ # SD_var4 <<-  as.character(table_sampling_def[1,colnames(table_sampling_def) == elements[4] ]) 
+ 
+ # MAX_NO_TRIPS_4_BOOTSTRAP <<-  as.character(table_strat_res[1,colnames(table_strat_res) == "NO_TRIPS_4_BOOTSTRAP" ]) 
+
+ stratification0 <<- strIni()
+ 
+ # decision <- data.frame(strat_res = c(col_ele_var1, col_ele_var2, col_ele_var3, col_ele_var4), sampling_def = c(SD_var1, SD_var2, SD_var3, SD_var4) )
+ decision <- data.frame(strat_res = c(col_ele_var1, col_ele_var2, col_ele_var3), sampling_def = c(SD_var1, SD_var2, SD_var3) )
+  
+ decision$equal <- TRUE
+ 
+ for (nr in 1:nrow(decision)) {
+ decision$equal[nr] <- ifelse(as.character(decision$strat_res[nr]) == as.character(decision$sampling_def[nr]), TRUE, FALSE)
+ }  
+ 
+ sharing_level <<- elements[which(!(decision$equal)) ] 
+ 
+ if (length(sharing_level) >0) {
+   
+ switch(sharing_level,
+        
+    space = {  SH_levels <- table_trips_sharing[, c(1:2,3,5,7)]},
+    time = { SH_levels <- table_trips_sharing[, c(1,3:4,5,7)]    },
+    technical = { SH_levels <- table_trips_sharing[, c(1,3,5:6,7)]   },
+    # commercial_category = {
+    # SH_levels <- table_trips_sharing[, c(1,3,5,7:8,9)]
+    # },
+    stop("Enter something that switches me!") )
+
+} else {
+    SH_levels <- table_trips_sharing[, c(1,3:4,5,7)]    
+}
+
+ current_species <<- 1
+ 
+ # modified 04.01.2019 (MTF)
+ 
+ bootstrapped_HL_reduced_FINAL <<- data.frame(matrix(nrow=0, ncol=(ncol(cs_all@hl)+3) ))
+ colnames(bootstrapped_HL_reduced_FINAL) <- c("Var1", "Var2", "Var3", colnames(cs_all@hl))
+ #
+ 
+ 
+for (this_spe in 1:length( target_SPECIES)) {
+
+  
+   current_species <<- this_spe
+  sppName <-  target_SPECIES[[this_spe]]
+  sppShortCode <- names(target_SPECIES)[this_spe]
+  
+    
+  print("**********************************************************************", quote=FALSE)
+  print("", quote=FALSE)
+  print(paste("Bootstrap for", toupper(sppName) ), quote=FALSE)
+  print("", quote=FALSE)
+  print("**********************************************************************", quote=FALSE)
+
+  
+CS_boot_scen <- subsetSpp(cs_all, spp == sppName, link = TRUE) 
+CL_boot_scen <-  subset(cl_all, taxon == sppName, link = TRUE)
+ 
+CS_boot_scen@tr$year = 2999# default setted date : 2999
+CS_boot_scen@hh$year = 2999
+CS_boot_scen@sl$year = 2999
+CS_boot_scen@hl$year = 2999
+CS_boot_scen@ca$year = 2999
+
+
+ # sampling
+ availSamp = merge(CS_boot_scen@hh, CS_boot_scen@hl)
+ 
+ availLand = CL_boot_scen@cl
+
+ availSamp$SampQuarter <-  quarter(availSamp$date)
+ availSamp$SampSemester <- ifelse(quarter(availSamp$date) == 1 | quarter(availSamp$date) == 2, 1, 2)
+
+ availLand$semester <- 1
+ availLand$semester[availLand$quarter %in% c(3, 4)] <- 2
+
+ Var1 = ""
+ Var2 = ""
+ Var3 = ""
+ 
+ Var1_lan = ""
+ Var2_lan = ""
+ Var3_lan = ""
+ 
+
+switch(col_ele_var1,
+       
+    GSA={   Var1 <- availSamp$area
+            Var1_lan <- availLand$area },
+    
+    Country={ Var1 <- availSamp$vslFlgCtry
+              Var1_lan <- availLand$vslFlgCtry },
+    
+    ALL = { Var1 <- "ALL"
+    Var1_lan <- "ALL" },
+    
+    stop("Enter something that switches me!")
+)
+
+
+switch(col_ele_var2,
+    
+    Q = { Var2 <- availSamp$SampQuarter
+    Var2_lan <- availLand$quarter },
+    
+    S = { Var2 <- availSamp$SampSemester
+    Var2_lan <- availLand$semester },
+    
+    Y = { Var2 <- 1
+    Var2_lan <- 1 },
+    
+    stop("Enter something that switches me!")
+)
+
+
+switch(col_ele_var3,   
+       
+    lev6 = {  Var3 <- availSamp$foCatEu6
+              Var3_lan <- availLand$foCatEu6 },
+    
+    lev4 = {  Var3 <- availSamp$foCatEu5
+              Var3_lan <- availLand$foCatEu5 },
+    
+    NONE = {  if (col_ele_var4 == "N") {
+              Var3 <- "1"
+              Var3_lan <- "1" } else {
+              print("Sampling by commercial category") } },
+    
+    stop("Enter something that switches me!")
+)
+ 
+ 
+ availStratSamp = unique(data.frame(Var1 = Var1, Var2 = Var2, Var3 = Var3 ))
+ # landings
+ availStratLand = unique(data.frame(Var1 = Var1_lan, Var2 =  Var2_lan, Var3 =  Var3_lan))
+ # common strata
+ tabStrat = merge(availStratSamp, availStratLand)
+ 
+ ## mean number of individuals by trip codes (samples), for each substratum
+ availStrat = Reduce("rbind", lapply(1 : nrow(tabStrat), meanNmeasByTripByStr, tabStrat, CS_boot_scen))
+ 
+
+ if (current_species == 1) {
+   
+    trips_bootstrap_first_species <<- vector(mode="list", length=nrow(tabStrat))
+    names(trips_bootstrap_first_species) <- paste(tabStrat$Var1, tabStrat$Var2, tabStrat$Var3, sep="_")
+    
+     trips_bootstrap_all_iters <<- vector(mode="list", length=nIter)
+     
+     for (len_ in 1:length( trips_bootstrap_first_species)) {
+       trips_bootstrap_first_species[[len_]] <- trips_bootstrap_all_iters
+     }
+     
+ }
+ 
+# table_subsamples
+
+THIS_SPE_SUBS <<- table_subsamples[table_subsamples$species == target_SPECIES[current_species], ]
+colnames(THIS_SPE_SUBS)[2:4] <- paste("Var", c(1:3), sep="") 
+colnames(THIS_SPE_SUBS)[5] <- "commCat"
+
+if ( any(THIS_SPE_SUBS$factor != 1) ) {
+  
+    # calculate number of individuals by trip-haul/commercial category
+   noMeasuresSamplesStrat <<- Reduce("rbind", lapply(1 : nrow(tabStrat), noMeasBySampleByStr, tabStrat, CS_boot_scen))
+
+ noMeasuresSamplesStrat$sample_ID <- paste(noMeasuresSamplesStrat$trpCodeHaul,  noMeasuresSamplesStrat$commCat)
+noMeasuresSamplesStrat$year <- apply(noMeasuresSamplesStrat, 1, function(x) as.numeric(strsplit(as.character(x[4]), split="_")[[1]][length(strsplit(as.character(x[4]), split="_")[[1]]) ]) ) 
+ 
+ invest_noMeasuresSamplesStrat <- dplyr::group_by(noMeasuresSamplesStrat, commCat)
+invest_noMeasuresSamplesStrat <-  data.frame(dplyr::summarise(invest_noMeasuresSamplesStrat,  mean_ind= mean(noMeasures), min_ind= min(noMeasures), max_ind= max(noMeasures)  ))
+
+noMeasuresSamplesStrat_commCat <- noMeasuresSamplesStrat 
+invest_noMeasuresSamplesStrat_commCat <- invest_noMeasuresSamplesStrat #not used in the bootstrap
+
+ # calculate number of individuals by trip-haul
+   noMeasuresSamplesStrat <<- Reduce("rbind", lapply(1 : nrow(tabStrat), noMeasBySampleByStrTripHaul, tabStrat, CS_boot_scen))
+noMeasuresSamplesStrat$sample_ID <- noMeasuresSamplesStrat$trpCodeHaul
+noMeasuresSamplesStrat$year <- apply(noMeasuresSamplesStrat, 1, function(x) as.numeric(strsplit(as.character(x[4]), split="_")[[1]][length(strsplit(as.character(x[4]), split="_")[[1]]) ]) ) 
+ 
+ invest_noMeasuresSamplesStrat <- dplyr::group_by(noMeasuresSamplesStrat, trpCode)
+invest_noMeasuresSamplesStrat <-  data.frame(dplyr::summarise(invest_noMeasuresSamplesStrat,  mean_ind= mean(noMeasures), min_ind= min(noMeasures), max_ind= max(noMeasures)  )) 
+
+noMeasuresSamplesStrat_trip <-noMeasuresSamplesStrat 
+invest_noMeasuresSamplesStrat_trip <- invest_noMeasuresSamplesStrat   #not used in the bootstrap
+
+# write.table(noMeasuresSamplesStrat_trip, file="test.csv", sep=";", row.names=F)
+
+# CALCULATE BIGGEST SAMPLES
+
+# BY TRIP/COMMERCIAL CATEGORY
+
+  head_big <- c("Var1","Var2", "Var3", "trpCode", "commCat", "noMeasures", "sample_ID", "year", "noMeasSUBSAMPLED")
+  biggestSamples_commCat <<- data.frame(matrix(nrow=0, ncol=length(head_big)))
+  colnames(biggestSamples_commCat) <- head_big
+  
+     cat_vect = as.character(unique(noMeasuresSamplesStrat_commCat$commCat))
+     
+     cat_scen <- unique(THIS_SPE_SUBS$commCat)
+     
+     if (any(cat_scen != "ALL") ) {
+       
+            THRESHOLDS_TABLE <- merge(noMeasuresSamplesStrat_commCat , THIS_SPE_SUBS, by=c("Var1", "Var2", "Var3", "commCat"))
+     THRESHOLDS_TABLE$acceptedRANGE_min <- as.integer(THRESHOLDS_TABLE$threshold-(THRESHOLD_TOLERANCE*THRESHOLDS_TABLE$threshold))
+       THRESHOLDS_TABLE$acceptedRANGE_max <- as.integer(THRESHOLDS_TABLE$threshold+(THRESHOLD_TOLERANCE*THRESHOLDS_TABLE$threshold))
+         THRESHOLDS_TABLE$noMeasSUBSAMPLED <- as.integer(THRESHOLDS_TABLE$noMeasures * as.numeric(THRESHOLDS_TABLE$factor) ) 
+ biggestSamples_commCat <- THRESHOLDS_TABLE[ THRESHOLDS_TABLE$noMeasSUBSAMPLED >= THRESHOLDS_TABLE$acceptedRANGE_min , ]   
+ if (nrow(biggestSamples_commCat) >0) {
+       biggestSamples_commCat$level <- "C"
+ }
+
+     }
+
+# BY TRIP
+      if (any(cat_scen == "ALL") ) {
+  THRESHOLDS_TABLE <- merge(noMeasuresSamplesStrat_trip, THIS_SPE_SUBS,  by=c("Var1", "Var2", "Var3", "commCat"))   
+  THRESHOLDS_TABLE$acceptedRANGE_min <- as.integer(THRESHOLDS_TABLE$threshold-(THRESHOLD_TOLERANCE* THRESHOLDS_TABLE$threshold))
+  THRESHOLDS_TABLE$acceptedRANGE_max <- as.integer(THRESHOLDS_TABLE$threshold+(THRESHOLD_TOLERANCE* THRESHOLDS_TABLE$threshold))
+  THRESHOLDS_TABLE$noMeasSUBSAMPLED <- as.integer(THRESHOLDS_TABLE$noMeasures * as.numeric(THRESHOLDS_TABLE$factor) ) 
+
+  biggestSamples_trip <<- THRESHOLDS_TABLE[ THRESHOLDS_TABLE$noMeasSUBSAMPLED >= THRESHOLDS_TABLE$acceptedRANGE_min, ] 
+   if (nrow(biggestSamples_trip) >0) {
+  biggestSamples_trip$level <- "T"
+   }
+      }
+  
+   if (any(cat_scen != "ALL") & any(cat_scen == "ALL") ) {
+  biggestSamples <<- data.frame(rbind(biggestSamples_commCat, biggestSamples_trip))
+  } else if (any(cat_scen != "ALL")  )   {
+     biggestSamples <<-  biggestSamples_commCat
+  } else {
+      biggestSamples <<-  biggestSamples_trip
+   }
+  
+}
+
+ # setting min and max number of trip by stratum
+ availStrat$maxSampSize = round(5000/ (availStrat$meanNmeasByTrip))
+ availStrat$maxSampSize[availStrat$maxSampSize>1000] = 1000
+ availStrat$maxSampSize[availStrat$maxSampSize<50] = 50
+   
+ availSamp <- setVar123(availSamp)
+  
+if ( any(THIS_SPE_SUBS$factor != 1) ) {
+  
+  for (nr in 1:nrow(availStrat)) {
+    
+  print("______________________________________________________________________", quote=FALSE)
+  print(paste("Stratum:", toupper(availStrat$Var1[nr]), toupper(availStrat$Var2[nr]), toupper(availStrat$Var3[nr]) ), quote=FALSE)
+  print("[Scenario with reduction of the number of measured]", quote=F)
+  print("______________________________________________________________________", quote=FALSE) 
+  
+   # Var1 Var2 Var3
+   this_strata_availSamp <- availSamp[availSamp$Var1 == availStrat$Var1[nr] & availSamp$Var2 == availStrat$Var2[nr] & availSamp$Var3 == availStrat$Var3[nr] , ]
+ 
+resOptCV = cvFunStr_FixedNoTrips_redMeas(nr, strIni(), availStrat, this_strata_availSamp, CS_boot_scen, CL_boot_scen, 
+                    sppName, nIter, SH_levels) 
+
+resOptCV$Var1 <-  availStrat$Var1[nr]
+resOptCV$Var2 <-  availStrat$Var2[nr]
+resOptCV$Var3 <-  availStrat$Var3[nr]
+resOptCV$species <- sppName
+
+   if (nr == 1 & this_spe == 1) {
+    resOptCV_final = resOptCV
+   } else {
+    resOptCV_final = data.frame(rbind(resOptCV_final, resOptCV))   
+   }
+   
+ }
+     
+ }  else {
+   
+ for (nr in 1:nrow(availStrat)) {
+   # Var1 Var2 Var3
+   this_strata_availSamp <- availSamp[availSamp$Var1 == availStrat$Var1[nr] & availSamp$Var2 == availStrat$Var2[nr] & availSamp$Var3 == availStrat$Var3[nr], ]
+   
+  print("______________________________________________________________________", quote=FALSE)
+  print(paste("Stratum:", toupper(availStrat$Var1[nr]), toupper(availStrat$Var2[nr]), toupper(availStrat$Var3[nr]) ), quote=FALSE)
+  print("______________________________________________________________________", quote=FALSE)
+   
+resOptCV = suppressWarnings(cvFunStr_FixedNoTrips(nr, strIni(), availStrat, this_strata_availSamp, CS_boot_scen, CL_boot_scen, 
+                    sppName, nIter, SH_levels) )
+resOptCV$Var1 <-  availStrat$Var1[nr]
+resOptCV$Var2 <-  availStrat$Var2[nr]
+resOptCV$Var3 <-  availStrat$Var3[nr]
+resOptCV$species <- sppName
+
+   if (nr == 1 & this_spe == 1) {
+resOptCV_final = resOptCV
+   } else {
+    resOptCV_final = data.frame(rbind(resOptCV_final, resOptCV))   
+   }
+   
+ }
+     
+ }
+ 
+} # end species
+ 
+     file_name <- paste( results_path, "/",res_dir, "/",SHORT_CASE_STUDY_NAME , " - HLs from bootstrap.csv", sep="")  
+    write.table(bootstrapped_HL_reduced_FINAL, file_name , sep=";", row.names=F)
+
+ file_name <- paste( results_path, "/",res_dir, "/", SHORT_CASE_STUDY_NAME , " - CVs from bootstrap.csv", sep="") 
+ write.table(resOptCV_final,  file_name , sep=";", row.names=F)
+
+  file_name <- paste( results_path, "/",res_dir, "/",SHORT_CASE_STUDY_NAME , " - Raised lfd from bootstrap.csv", sep="")  
+ write.table( LengthStr_dataframe, file_name , sep=";", row.names=F)
+ 
+   file_name <- paste( results_path, "/",res_dir, "/",SHORT_CASE_STUDY_NAME , " - CVs from bootstrap by length.csv", sep="")  
+   colnames(CVbyLength_dataframe) = c("species", "iteration",  "Var1", "Var2", "Var3", "length", "CV")
+ write.table( CVbyLength_dataframe, file_name , sep=";", row.names=F)  
+
+
+```
+

@@ -1,0 +1,497 @@
+---
+title: "SDTool (STREAM project): Run Optimization by species"
+author: "M.T. Facchini, I. Bitetto (COISPA, Italy)"
+date: '`r date()`'
+output: word_document
+---
+
+
+```{r compil, eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+#just a reminder to how compile a docx doc
+if(F){
+rmarkdown::render("Data.Rmd",c("word_document"))
+}
+```
+
+
+#Tools
+
+R, Rstudio and packages.
+
+```{r results='hide', message=FALSE, warning=FALSE}
+
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=4,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+
+#load packages
+library(fishPifct)
+library(pander)
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(data.table) 
+library(png)
+#library(ggradar)
+
+# SD Tool v.3 and WKBIOPTIM SimTool v.1  were taken into account for the developement of the present tool.
+# SD tool has been developed in MARE/2014/19 project and updated in MARE/2016/22 project (STREAM)
+
+# The tool is documented in Deliverable D3.3 "Upgrade the methodological framework and tools for sampling optimization, implement and report case studies" (January 2019)
+
+# Authors of the first version of SD Tool: F. Gontrand, T. Rouyer, N. Billet, 2016
+# IFREMER, UMR MARBEC, Avenue Jean Monnet, BP 171, 34203 S` ete, France 
+
+# Authors of the first version of WKBIOPTIM scripts: Nuno Prista (SLU, Sweden) from a subgroup work carried out during a local Workshop on Sampling Design and Optimization (Lysekil, 31 October to 4 November 2016, unpublished)
+# SLU Aqua, Institute of Marine Research, Department of Acquatic Resources - Swedish University of Agricultural Sciences
+
+# Authors of this new tool: M.T. Facchini, I. Bitetto, 2017
+# COISPA Tecnologia & Ricerca, Via dei Trulli 18/20 - (Bari), Italy 
+
+# In case of use of the tool, the Authors should be cited.
+# If you have any comments or suggestions please contact the following e-mail addresses: facchini@coispa.it, bitetto@coispa.it
+# SD Tool is believed to be reliable. However, we disclaim any implied warranty or representation 
+# about its accuracy, completeness or appropriateness for any particular purpose.
+
+
+#pander options
+panderOptions('table.split.table', 60)
+panderOptions('table.style', 'grid')
+panderOptions('table.split.cells', 10)
+panderOptions('table.alignment.default', 'left')
+panderOptions('table.alignment.rownames', 'right')
+panderOptions('decimal.mark', ',')
+panderOptions('graph.fontsize', '10')
+
+
+```
+
+
+
+# 05 Optimization phase
+
+Run the optimization for a target species in order to find the "optimal" sampling size range analysing the precision of the sampling, i.e. analysing the CV of the length structure of the species. 
+
+This script includes options for a flexible definition of the sampling stratification considering:
+a)	different technical strata on the basis of gear (level 4) and/or metier, so grouping strata with similar characteristics; 
+b)	different temporal aggregation in order to make flexible the stratification by quarter, depending on fisheries and target species specifications;
+c)	different aggregation at spatial level, accounting for the possibility of combining different GSAs (task sharing among GSAs);
+d)	data of stocks considered shared among MS (e.g. deep water pink shrimp stock in the GSAs 18, 19, 20 shared among Italy and Greece), in order to get results on the whole area of the stock (not only by GSA).
+
+
+##Settings 
+
+```{r settings}
+# set the working directory
+myWD <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04"
+setwd(myWD)
+
+CASE_STUDY_PATH <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04" 
+
+cl_all <- readRDS(paste(CASE_STUDY_PATH, "/input files/costCL.rds", sep=""))
+cs_all <- readRDS(paste(CASE_STUDY_PATH, "/input files/costCS.rds", sep=""))
+
+pastSituations <<- read.csv(paste(CASE_STUDY_PATH, "/04_dataInvestigation/Past situation.csv", sep=""), sep=";")
+
+metier_shortcode <<- read.csv(paste(CASE_STUDY_PATH, "/input files/metier_shortcode.csv", sep=""), sep=";")
+table_strat_res <<- read.csv(paste(CASE_STUDY_PATH, "/input files/05_1_stratification_results.csv", sep=""), sep=";")
+
+sampSizeRange <-  read.csv(paste(CASE_STUDY_PATH, "/input files/05_2_Optimized sample size.csv", sep=""), sep=";")
+
+ REFERENCE_SPECIES <<- "Parapenaeus longirostris"
+ RS_shortcode <<- "DPS"
+ 
+ nIter <<- 100
+
+pastSituations <- pastSituations[pastSituations$Species == REFERENCE_SPECIES, ]
+
+cs_all@ca <- csData()@ca 
+
+# strDates <- cs_all@hh$date
+# dates <- as.Date(strDates, "%d/%m/%Y")
+# cs_all@hh$date <- dates
+  
+cs_all@hh$foVal <- "V"
+
+cs_all@sl$landCat <- "HUC"
+cs_all@hl$landCat <- "HUC"
+
+cs_all@sl$subSampCat  <- ""
+cs_all@hl$subSampCat  <- ""
+
+cs_all@sl$catchCat <- toupper(cs_all@sl$catchCat) 
+cs_all@hl$catchCat <- toupper(cs_all@hl$catchCat) 
+
+dir.create(CASE_STUDY_PATH)
+
+for (nr in 1:nrow(cl_all@cl)) {
+  if (length(as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]]) ) > 0) {
+       cl_all@cl$foCatEu5[nr] =  as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]])
+  cl_all@cl$foCatEu6[nr] = as.character(metier_shortcode$short_code[as.character(metier_shortcode$Fishing_activity_category_level6) == cl_all@cl$foCatEu6[nr]]) 
+  
+} else {
+  print(paste("NOT FOUND: ", cl_all@cl$foCatEu6[nr]))
+}
+} 
+  
+   for (nr in 1:nrow(cs_all@hh)) {
+   if ( length(as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]]) ) >0) {
+cs_all@hh$foCatEu5[nr] =  as.character(metier_shortcode$lev4[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]])
+  cs_all@hh$foCatEu6[nr] =   as.character(metier_shortcode$short_code[as.character(metier_shortcode$Fishing_activity_category_level6) == cs_all@hh$foCatEu6[nr]])
+   } else {
+   print(paste("NOT FOUND: ", cs_all@hh$foCatEu6[nr]))    
+   } 
+   } 
+
+elements <- c("space",	"time",	"technical")
+  # elements <- c("space",	"time",	"technical", "commercial_category")
+
+col_ele_var1 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[1] ]) 
+col_ele_var2 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[2] ])  
+col_ele_var3 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[3] ]) 
+# col_ele_var4 <<-  as.character(table_strat_res[1,colnames(table_strat_res) == elements[4] ]) 
+ 
+LengthStr_dataframe <<- data.frame(matrix(nrow=0, ncol=6))    
+colnames(LengthStr_dataframe) = c("iteration",  "Var1", "Var2", "Var3", "length", "value")
+global_case <<- NULL
+
+
+
+```
+
+Input
+
+*CS COST object*
+
+```{r input1}
+
+head(cs_all@tr)
+head(cs_all@hh)
+head(cs_all@sl)
+head(cs_all@hl)
+head(cs_all@ca)
+
+```
+
+*Short codes for metiers*
+
+```{r input2}
+
+head(metier_shortcode)
+
+```
+
+*Stratification table*
+
+```{r input3}
+
+table_strat_res
+
+```
+
+
+
+ANALYSES & OUTPUT
+
+*Derived number of individuals*
+
+
+```{r data4 }
+
+gsas <- unique(cs_all@hh$area)
+
+years <- unique(cs_all@tr$year)
+years <- years[order(years)]
+
+dummy <- sapply(list.files(pattern="[.]R$", path="SDTfuns/", full.names=TRUE), source)
+
+res_dir <<- paste(CASE_STUDY_PATH, "/05_optimization_",RS_shortcode, sep="")
+
+dir.create(res_dir)
+
+
+CS_boot <- try(subsetSpp(cs_all, spp == REFERENCE_SPECIES, link = TRUE) , silent=TRUE)
+CL_boot <-  subset(cl_all, taxon == REFERENCE_SPECIES, link = TRUE)
+
+ # default setted date : 2999
+ CS_boot@tr$year = 2999
+ CS_boot@hh$year = 2999
+ CS_boot@sl$year = 2999
+ CS_boot@hl$year = 2999
+ # CL_boot@cl$year = 2999
+ 
+ # sampling
+ availSamp = merge(CS_boot@hh, CS_boot@hl)
+ 
+ availLand = CL_boot@cl
+
+ availSamp$SampQuarter <-  quarter(availSamp$date)
+   availSamp$SampSemester <- ifelse(quarter(availSamp$date) == 1 | quarter(availSamp$date) == 2, 1, 2)
+
+ availLand$semester <- 1
+ availLand$semester[availLand$quarter %in% c(3, 4)] <- 2
+
+ Var1 = ""
+ Var2 = ""
+ Var3 = ""
+ 
+ Var1_lan = ""
+ Var2_lan = ""
+ Var3_lan = ""
+ 
+switch(col_ele_var1,
+    GSA={ 
+    Var1 <- availSamp$area
+    Var1_lan <- availLand$area
+    },
+    Country={
+    Var1 <- availSamp$vslFlgCtry
+    Var1_lan <- availLand$vslFlgCtry
+    },
+    ALL = { 
+    Var1 <- rep("ALL", length(availSamp$area) )
+    Var1_lan <-  rep("ALL", length(availLand$area) )
+    },
+    stop("Enter something that switches me!")
+)
+
+
+switch(col_ele_var2,
+    Q = { 
+    Var2 <- availSamp$SampQuarter
+    Var2_lan <- availLand$quarter
+    },
+    S = { 
+    Var2 <- availSamp$SampSemester
+    Var2_lan <- availLand$semester
+    },
+    Y = { 
+    Var2 <- 1
+    Var2_lan <- 1
+    },
+    stop("Enter something that switches me!")
+)
+
+
+switch(col_ele_var3,    
+    lev6 = { 
+    Var3 <- availSamp$foCatEu6
+    Var3_lan <- availLand$foCatEu6
+    },
+    lev4 = { 
+    Var3 <- availSamp$foCatEu5
+    Var3_lan <- availLand$foCatEu5
+    },
+    NONE = {  
+      if (col_ele_var4 == "N") {
+         Var3 <- "1"
+         Var3_lan <- "1"
+      } else {
+    print("Sampling by commercial category")
+    }
+    },
+    stop("Enter something that switches me!")
+)
+
+
+
+# switch(col_ele_var4,    
+#     Y = { 
+#     Var3 <- availSamp$commCat
+#     Var3_lan <- availLand$commCat
+#     },
+#     N = { print(paste("Sampling by", col_ele_var3) )
+#     },
+#     stop("Enter something that switches me!")
+# )
+
+
+ availStratSamp = unique(data.frame(Var1 = Var1, Var2 = Var2, Var3 = Var3 ))
+ # landings
+ availStratLand = unique(data.frame(Var1 = Var1_lan, Var2 =  Var2_lan, Var3 =  Var3_lan))
+ # common strata
+ tabStrat = merge(availStratSamp, availStratLand)
+ 
+ pander(tabStrat)
+ 
+ ## mean number of individuals by trip codes (samples), for each substratum
+ availStrat = Reduce("rbind", lapply(1 : nrow(tabStrat), meanNmeasByTripByStr, tabStrat, CS_boot))
+ 
+
+ # riprendere da qui
+ 
+for (n_it in c(1:nIter)) {
+  
+#   > sampSizeRange
+#      [,1] [,2]
+# init   12   18
+#        17   23
+#        23   36
+  
+  res_count = indMeasNoStr_count(n_it, availStrat, availSamp, sampSizeRange, CS_boot)
+    
+  if (n_it == 1) {
+    countByStr = res_count
+  } else {
+    countByStr = data.frame(rbind(countByStr, res_count))
+  }
+  
+}
+
+countByStr_aggregated = group_by(countByStr, Var1, Var2, Var3)
+countFinalTab <-  data.frame(summarise(countByStr_aggregated, mean = round(mean(nInd), 0),  st_dev = round(sd(nInd), 0)))
+ 
+ colnames(countFinalTab)[4:5] <- c("Derived no. of individuals (mean)", "Derived no. of individuals (st.dev.)")
+
+file_name <- paste( res_dir, "/",RS_shortcode," - Derived no. of individuals from past sampling.csv", sep="") 
+ 
+ write.table(countFinalTab, file_name, sep=";" , row.names=F)
+ 
+ ## ------------ comparison
+ 
+ pastData = merge(pastSituations, availStrat, by = c("Var1", "Var2",  "Var3"))
+ 
+ comparison = merge(pastData, countFinalTab, by = c("Var1", "Var2", "Var3"), all.x = TRUE)
+ comparison <- comparison   
+ vect_tech <- unique(  comparison$Var3) 
+
+for (tec in 1:length(vect_tech)) {
+  plot_title <- paste(REFERENCE_SPECIES, " ", vect_tech[tec], " - Derived no. vs past no. of measures",  sep="")
+   file_name <- paste( res_dir, "/",RS_shortcode,  " - Derived no. vs past no. of measures ",  vect_tech[tec] , ".png", sep="") 
+
+ comparison_tec <- comparison[comparison$Var3 == vect_tech[tec], ]
+  colnames(comparison_tec)[15:16] <- c("count", "stdev")
+  
+  gg <- ggplot(comparison_tec) + 
+   geom_point(comparison_tec, mapping=aes(y=count, x=nMeasTotal, col = as.factor(year)), size = 3) +
+   geom_errorbar(aes( x=nMeasTotal, ymin= (count - stdev), max = (count + stdev) ), position = position_dodge(width = 0.7) ) +
+   geom_abline(intercept = 0, slope = 1, size = 0.2) +
+   theme(axis.text.x = element_text(size=7), axis.text.y = element_text(size=7)) +
+   facet_grid(Var1 ~ Var2, scales='free_x') +
+   theme(legend.title=element_blank(), legend.position="top") +
+   labs(y = "Derived number of individuals", x = "Past number of individuals")+
+   ylim(0, ceiling(max((comparison_tec$count + comparison_tec$stdev), comparison_tec$nMeas, na.rm = TRUE)))+
+   xlim(0, ceiling(max((comparison_tec$count + comparison_tec$stdev), comparison_tec$nMeas, na.rm = TRUE))) + 
+   ggtitle(plot_title )
+ print(gg)
+
+   ggsave(file_name, gg, width=10, height=8)  
+ 
+ try(dev.off() )
+ 
+ }
+
+   
+``` 
+
+
+
+*Assess the past sampling against the optimized sample size*
+ 
+ 
+```{r data5 }
+
+ OptTrips_min <- sampSizeRange[sampSizeRange$min_max == "min", c(1:4)] 
+colnames(OptTrips_min)[ncol(OptTrips_min)] <- "minSamp" 
+ OptTrips_max <- sampSizeRange[sampSizeRange$min_max == "max", c(1:4)] 
+colnames(OptTrips_max)[ncol(OptTrips_max)] <- "maxSamp"
+
+OptTrips <- merge( OptTrips_min, OptTrips_max)
+
+#unique( cvFunS4[, c( "Var1", "Var2", "Var3", "minSamp", "maxSamp")])
+ 
+ comparison_trips <- merge(comparison, OptTrips)  
+ 
+ comparison_trips_maxs <- aggregate( comparison_trips$sampSize, by=list(comparison_trips$Var1, comparison_trips$Var2, comparison_trips$Var3), FUN="max")
+ 
+ colnames(comparison_trips_maxs) <- c( "Var1", "Var2", "Var3", "maxPast")
+comparison_trips <- merge(comparison_trips, comparison_trips_maxs)
+ 
+ comparison_trips$max_y <- comparison_trips$maxSamp
+ for (nr in 1:nrow(comparison_trips)) {
+    comparison_trips$max_y [nr] <- max(comparison_trips$max_y [nr], comparison_trips$maxPast[nr])
+ }
+ 
+comparison_trips$lim_33neg <- comparison_trips$minSamp -(comparison_trips$maxSamp- comparison_trips$minSamp) *0.33
+comparison_trips$lim_33pos <- comparison_trips$maxSamp + (comparison_trips$maxSamp- comparison_trips$minSamp) *0.33
+comparison_trips$year <- as.integer(comparison_trips$year ) 
+  min_Y = min(comparison_trips$year)
+  max_Y = max(comparison_trips$year)
+  
+  comparison_trips$lim_33neg[comparison_trips$lim_33neg < 0] <- 0
+  
+ limite_HV = max(comparison_trips$lim_33pos, comparison_trips$maxPast, na.rm = TRUE) +  max(comparison_trips$lim_33pos, comparison_trips$maxPast, na.rm = TRUE) *0.1
+comparison_trips$limite_HV <- limite_HV
+   vect_tech <- unique(  comparison_trips$Var3) 
+     vect_area <- unique(  comparison_trips$Var1) 
+      vect_time <- unique(  comparison_trips$Var2) 
+     
+      all_graphs <- list()
+       
+      ind <- 1
+  for (tec in 1:length(vect_tech)) {
+   for (are in 1:length(vect_area)) {
+      for (ti in 1:length(vect_time)) { 
+           
+plot_title <- paste(REFERENCE_SPECIES, " ", vect_tech[tec], " - ", vect_area[are], " - ", vect_time[ti], " - Optimized vs past sampling",  sep="")
+   file_name <- paste( res_dir, "/",RS_shortcode, " - Optimized vs past sampling ", vect_tech[tec], " ", vect_area[are], " ", vect_time[ti] , ".png", sep="") 
+
+ comparison_trips_tec <- comparison_trips[comparison_trips$Var3 == as.character(vect_tech[tec]) & comparison_trips$Var1 == as.character(vect_area[are]) & comparison_trips$Var2 == as.character(vect_time[ti]), ]
+ 
+ if (nrow(comparison_trips_tec) >0) {
+   
+  lim_33pos  <-  unique( comparison_trips_tec$lim_33pos  )
+      lim_33neg  <-   unique( comparison_trips_tec$lim_33neg  )
+      min_trip  <-  unique( comparison_trips_tec$minSamp  )
+      max_trip  <-   unique( comparison_trips_tec$maxSamp  )
+     shift_text = (max_trip - min_trip) *0.1
+    
+      
+ gg <- ggplot(comparison_trips_tec, aes(x=year) ) +    
+   geom_point(aes(y=sampSize, x=year, size = 3)) + 
+   theme(axis.text.x = element_text(size=7), axis.text.y = element_text(size=7)) +
+geom_hline(data=comparison_trips_tec, aes(yintercept = min_trip) , linetype=2) +
+ geom_hline(data=comparison_trips_tec,aes(yintercept = max_trip) , linetype=2) +    
+geom_ribbon(data=comparison_trips_tec, aes(ymin = min_trip, ymax = max_trip), fill = "green",  alpha=0.25) +   
+           
+geom_ribbon(data=comparison_trips_tec, aes(ymin = max_trip, ymax = lim_33pos ), fill = "yellow",  alpha=0.25) +  
+ geom_ribbon(data=comparison_trips_tec, aes(ymin = lim_33neg, ymax = min_trip ), fill = "yellow",  alpha=0.25) +  
+            
+geom_ribbon(data=comparison_trips_tec, aes(ymin = lim_33pos, ymax = limite_HV  ), fill = "red",  alpha=0.25) +  
+geom_ribbon(data=comparison_trips_tec, aes(ymin = 0, ymax = lim_33neg ), fill = "red",  alpha=0.25) +     
+ 
+ geom_text(data=comparison_trips_tec, x = min_Y, y = limite_HV-shift_text  , label = "Over-sampling", hjust=0, vjust=0, size = 3, colour = "brown4") +
+   geom_text(data=comparison_trips_tec,x =min_Y, y = lim_33pos-shift_text  , label = "Intermediate over-sampling", hjust=0, vjust=0, size =3, colour = "darkgoldenrod1") +
+      geom_text(data=comparison_trips_tec,x = min_Y, y = max_trip-shift_text , label = "Optimized #trips (max)", hjust=0, vjust=0, size =3, colour = "chartreuse4") +
+   geom_text(data=comparison_trips_tec,x = min_Y, y = min_trip+shift_text , label = "Optimized #trips (min)", hjust=0, vjust=0, size = 3, colour = "chartreuse4") +
+   geom_text(data=comparison_trips_tec,x = min_Y, y = lim_33neg+shift_text , label = "Intermediate under-sampling", hjust=0, vjust=0, size = 3, colour = "darkgoldenrod1") +
+       geom_text(data=comparison_trips_tec,x = min_Y, y = ifelse(lim_33neg==0, -10, shift_text) , label = "Under-sampling", hjust=0, vjust=0, size = 3, colour = "brown4") +
+   theme(legend.title=element_blank(), legend.position="top", axis.title=element_text(size=10,face="bold")) +
+   labs( y = "Past number of trips") +
+   scale_alpha(guide = 'none') +
+   scale_size(guide = 'none') +
+       scale_x_continuous(breaks=seq(min_Y, max_Y, 1 ) ) +  ggtitle(plot_title)
+print(gg) 
+ 
+ ggsave(file_name, gg, width=6, height=6) 
+   
+ try(dev.off() ) 
+   
+ }
+ 
+ all_graphs[[ind]] <- gg
+ ind <- ind +1 
+ 
+}
+ }
+  }
+      
+      for (le in 1:length(all_graphs) ) {
+        print (all_graphs[le])
+      }
+ 
+
+
+ 
+```

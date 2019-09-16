@@ -1,0 +1,528 @@
+---
+title: "SDTool (STREAM project): Run evaluation of performed scenarios respect to the baseline"
+author: "M.T. Facchini, I. Bitetto (COISPA, Italy)"
+date: '`r date()`'
+output: word_document
+---
+
+
+```{r compil, eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+#just a reminder to how compile a docx doc
+if(F){
+rmarkdown::render("Data.Rmd",c("word_document"))
+}
+```
+
+
+#Tools
+
+R, Rstudio and packages.
+
+
+```{r results='hide', message=FALSE, warning=FALSE}
+
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=6,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+
+#load packages
+library(fishPifct)
+library(pander)
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(data.table) 
+library(ggplot2)
+library(dplyr)
+library(stringr)
+library(Metrics)
+library(emdist)
+
+# SD Tool v.3 and WKBIOPTIM SimTool v.1  were taken into account for the developement of the present tool.
+# SD tool has been developed in MARE/2014/19 project and updated in MARE/2016/22 project (STREAM)
+
+# The tool is documented in Deliverable D3.3 "Upgrade the methodological framework and tools for sampling optimization, implement and report case studies" (January 2019)
+
+# Authors of the first version of SD Tool: F. Gontrand, T. Rouyer, N. Billet, 2016
+# IFREMER, UMR MARBEC, Avenue Jean Monnet, BP 171, 34203 S` ete, France 
+
+# Authors of the first version of WKBIOPTIM scripts: Nuno Prista (SLU, Sweden) from a subgroup work carried out during a local Workshop on Sampling Design and Optimization (Lysekil, 31 October to 4 November 2016, unpublished)
+# SLU Aqua, Institute of Marine Research, Department of Acquatic Resources - Swedish University of Agricultural Sciences
+
+# Authors of this new tool: M.T. Facchini, I. Bitetto, 2017
+# COISPA Tecnologia & Ricerca, Via dei Trulli 18/20 - (Bari), Italy 
+
+# In case of use of the tool, the Authors should be cited.
+# If you have any comments or suggestions please contact the following e-mail addresses: facchini@coispa.it, bitetto@coispa.it
+# SD Tool is believed to be reliable. However, we disclaim any implied warranty or representation 
+# about its accuracy, completeness or appropriateness for any particular purpose.
+
+
+#pander options
+panderOptions('table.split.table', 60)
+panderOptions('table.style', 'grid')
+panderOptions('table.split.cells', 10)
+panderOptions('table.alignment.default', 'left')
+panderOptions('table.alignment.rownames', 'right')
+panderOptions('decimal.mark', ',')
+panderOptions('graph.fontsize', '10')
+
+
+```
+
+
+
+# Run evaluation of performed scenarios 
+
+Script performing a comparison between each performed scenario respect to the baseline 
+
+##Settings 
+
+```{r settings}
+
+# set the working directory
+myWD <-  "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04"
+setwd(myWD)
+
+scenarios_path <- "C:\\Users\\Bitetto Isabella\\OneDrive - Coispa Tecnologia & Ricerca S.C.A.R.L\\MARE22\\STREAM\\FINAL REVISION OF DELIVERABLES\\To upload on GITHUB\\WP3\\Task 3.3\\SD tool 2.04" 
+ 
+BASELINE_scenario <- "06_Baseline"
+
+sapply(list.files(pattern="[.]R$", path="SDTfuns/", full.names=TRUE), source);
+
+scenarios_dirs <- list.dirs(path = scenarios_path, recursive=F,  full.names = FALSE)
+
+ target_SPECIES <<- list("DPS" = "Parapenaeus longirostris")
+
+```
+
+
+*Evaluation of scenarios*
+
+```{r data2}
+
+dir.create(paste(scenarios_path, "/07_Evaluation", sep=""))
+
+
+scenarios_dirs <- scenarios_dirs[str_detect(scenarios_dirs[], "06_") ] 
+
+head_ <- c("scenario", "cv", "nMeas", "sampSize", "Var1", "Var2", "Var3", "species", "iteration") 
+
+all_CV_tables <- data.frame(matrix("", nrow=0, ncol=length(head_ )))
+ colnames(all_CV_tables) <- head_
+  
+
+ head_3 <- c("scenario", "species",  "iteration", "Var1", "Var2", "Var3", "length", "value") 
+
+all_LFD_tables <- data.frame(matrix("", nrow=0, ncol=length(head_3 )))
+ colnames(all_LFD_tables) <- head_3 
+ 
+  head_4 <- c("scenario", "species",  "iteration", "Var1", "Var2", "Var3", "length", "cv") 
+
+all_CV_len_table <- data.frame(matrix("", nrow=0, ncol=length(head_4 )))
+ colnames(all_CV_len_table) <- head_4 
+ 
+
+  head_5 <- c("scenario", "Var1", "Var2", "Var3", "sampType", "landCtry", "vslFlgCtry", "year", "proj", "trpCode", "staNum", "spp", "catchCat", "landCat", "commCatScl", "commCat", "subSampCat", "sex", "lenCls", "lenNum") 
+
+all_HL_table <- data.frame(matrix("", nrow=0, ncol=length(head_5 )))
+ colnames(all_HL_table) <- head_5
+
+ 
+ for (ncs in 1:length(scenarios_dirs)) {
+  
+    CV_table <-  read.csv(paste(scenarios_path, "/", scenarios_dirs[ncs], "/", substring(scenarios_dirs[ncs], 4,nchar(scenarios_dirs[ncs]))," - CVs from bootstrap.csv", sep=""  ), sep=";")
+  
+    LFD_table <-  read.csv(paste(scenarios_path, "/", scenarios_dirs[ncs], "/", substring(scenarios_dirs[ncs], 4,nchar(scenarios_dirs[ncs]))," - Raised lfd from bootstrap.csv", sep=""  ), sep=";")  
+    
+      CV_len_table <-  read.csv(paste(scenarios_path, "/", scenarios_dirs[ncs], "/", substring(scenarios_dirs[ncs], 4,nchar(scenarios_dirs[ncs]))," - CVs from bootstrap by length.csv", sep=""  ), sep=";")
+                 
+         HL_table <-  read.csv(paste(scenarios_path, "/", scenarios_dirs[ncs], "/", substring(scenarios_dirs[ncs], 4,nchar(scenarios_dirs[ncs]))," - HLs from bootstrap.csv", sep=""  ), sep=";")
+      
+          CV_table <- data.frame(cbind( rep(scenarios_dirs[ncs], nrow(CV_table)), cbind( CV_table, c(1:nrow(CV_table))))) 
+    colnames(CV_table) <- head_
+   all_CV_tables <- data.frame(rbind(all_CV_tables, CV_table))  
+   
+  LFD_table <- data.frame(cbind( rep(scenarios_dirs[ncs], nrow(LFD_table)),  LFD_table ))
+  colnames(LFD_table) <- head_3
+  all_LFD_tables <- data.frame(rbind(all_LFD_tables, LFD_table)) 
+ 
+  
+    CV_len_table <- data.frame(cbind( rep(scenarios_dirs[ncs], nrow(CV_len_table)),  CV_len_table ))
+  colnames(CV_len_table) <- head_4
+  all_CV_len_table <- data.frame(rbind(all_CV_len_table, CV_len_table))  
+  
+  
+    HL_table <- data.frame(cbind( rep(scenarios_dirs[ncs], nrow(HL_table)),  HL_table ))
+  colnames(HL_table) <- head_5
+  all_HL_table <- data.frame(rbind(all_HL_table, HL_table)) 
+  
+ }
+ 
+   write.table(all_CV_tables, file=paste(scenarios_path, 
+        "/07_Evaluation/CVs table - all scenarios.csv", sep=""), sep=";", row.names=F)
+  write.table(all_LFD_tables, file=paste(scenarios_path, 
+        "/07_Evaluation/LFDs table - all scenarios.csv", sep=""), sep=";", row.names=F)
+    write.table(all_CV_len_table, file=paste(scenarios_path, 
+        "/07_Evaluation/CVs by length table - all scenarios.csv", sep=""), sep=";", row.names=F)
+
+all_LFDs <- group_by(all_LFD_tables, scenario, species,  Var1, Var2, Var3,  length)
+all_LFDs <-  data.frame(summarise(all_LFDs,  number= mean(value), sd_number= sd(value) )) 
+
+all_CVs_len <- group_by(all_CV_len_table, scenario, species,  Var1, Var2, Var3,  length)
+all_CVs_len <-  data.frame(summarise(all_CVs_len,  mean_CV= mean(cv), sd_CV = sd(cv) )) 
+
+all_LFDs_perc <- group_by(all_LFDs, scenario, species,Var1, Var2, Var3)
+all_LFDs_perc <-  data.frame(summarise(all_LFDs_perc,  number= sum(number))) 
+     colnames(all_LFDs_perc)[ncol(all_LFDs_perc)] <- "total"
+
+         
+    percs <-  merge(all_LFDs, all_LFDs_perc)
+   
+    percs$perc <- with(percs, number/total *100) 
+
+all_LFDs$inf <- all_LFDs$number - all_LFDs$sd_number
+all_LFDs$sup <-  all_LFDs$number +  all_LFDs$sd_number
+
+all_LFDs$inf[all_LFDs$inf < 0] <- 0
+
+met_vect <- unique(percs$Var3)
+
+for (sp in 1:length(target_SPECIES)) {
+  
+  for (met in 1:length(met_vect)) {
+    
+    this_percs <- percs[percs$species == target_SPECIES[sp] & percs$Var3 == met_vect[met], ]
+    
+     if (sp == 2) {
+      this_percs <- percs[percs$species == target_SPECIES[sp] & percs$Var3 == met_vect[met] & percs$Var1 =="GSA19", ]
+   }
+    
+    if (nrow(this_percs) >0) { 
+    ggplot(this_percs, mapping=aes(col = as.factor( scenario))) + 
+   geom_line(this_percs, mapping=aes(x=length, y=perc), size = 1) +
+    # geom_ribbon(data=all_LFDs, aes(x=length, ymin = inf, ymax = sup, fill =  as.factor( casestudy_folder)), col =NA, alpha=0.15) +       
+   # geom_smooth(all_LFD_tables, se=F, mapping=aes(x=sampSize, y=cv), size=0.5) +
+#  geom_vline(all_tables, mapping=aes(xintercept = min_no_trips , col = as.factor( species), typeline=2), size = 0.5)+
+#  geom_vline(all_tables, mapping=aes(xintercept = max_no_trips, col = as.factor( species), type=2), size = 0.5)+
+   theme(axis.text.x = element_text(size=7), axis.text.y = element_text(size=7)) +
+ facet_grid( Var1 ~ Var2, scales="free_x") + 
+   theme(legend.title=element_blank(), legend.position="top") +
+   labs(x = "length class", y = "LFD%")  + ggtitle(paste(target_SPECIES[sp], "- Raised LFD"))
+ 
+    file_name <- paste(scenarios_path, "/07_Evaluation/",  
+      names(target_SPECIES)[sp], " - " , met_vect[met], " - LFDs comparison.jpg", sep="")
+    
+ ggsave(file_name, last_plot(), width=10, height=8)  
+
+ graphics.off()
+    }
+  }
+  
+}
+
+met_vect <- unique(all_CVs_len$Var3)
+
+for (sc in 1:length(scenarios_dirs)) {
+   name_sc <- substring( scenarios_dirs[sc], 4,nchar( scenarios_dirs[sc])) 
+
+  for (met in 1:length(met_vect)) {
+    
+    this_CV_len <- all_CVs_len[all_CVs_len$scenario == scenarios_dirs[sc] & all_CVs_len$Var3 == met_vect[met], ]
+        if (nrow(this_CV_len) >0) { 
+
+    ggplot(this_CV_len, mapping=aes(col = as.factor( species))) + 
+   geom_line(this_CV_len, mapping=aes(x=length, y=mean_CV), size = 1) +
+    # geom_ribbon(data=all_LFDs, aes(x=length, ymin = inf, ymax = sup, fill =  as.factor( casestudy_folder)), col =NA, alpha=0.15) +       
+   # geom_smooth(all_LFD_tables, se=F, mapping=aes(x=sampSize, y=cv), size=0.5) +
+#  geom_vline(all_tables, mapping=aes(xintercept = min_no_trips , col = as.factor( species), typeline=2), size = 0.5)+
+#  geom_vline(all_tables, mapping=aes(xintercept = max_no_trips, col = as.factor( species), type=2), size = 0.5)+
+   theme(axis.text.x = element_text(size=7), axis.text.y = element_text(size=7)) +
+ facet_grid( Var1 ~ Var2, scales="free_x") + 
+   theme(legend.title=element_blank(), legend.position="top") +
+   labs(x = "length class", y = "mean CV")  + ggtitle("CV by lenght")
+ 
+    file_name <- paste(scenarios_path, "/07_Evaluation/",  
+      name_sc, " - " , met_vect[met], " - CVs by length comparison.jpg", sep="")
+    
+ ggsave(file_name, last_plot(), width=10, height=8)  
+
+ graphics.off()
+        }
+  }
+  
+}
+
+
+ other_SCENARIOS <-  scenarios_dirs[scenarios_dirs != BASELINE_scenario]
+ 
+ CVstr_byspecies <- group_by(all_CV_tables, scenario, species,  Var1, Var2, Var3)
+CVstr_byspecies <-  data.frame(summarise(CVstr_byspecies,  mean_CV= mean(cv, na.rm=TRUE),  min_CV= min(cv, na.rm=TRUE), max_CV=max(cv, na.rm=TRUE),  sample_size=mean(sampSize), mean_noIndiv = mean(nMeas, na.rm=TRUE) ) )
+ 
+head_ <- c("species", "Var1", "Var2", "Var3","scenario" , "CV", "samp_size", "no_indiv") 
+SUMMARY_table <- data.frame(matrix(nrow=0, ncol=length(head_)))
+  colnames(SUMMARY_table) = head_                          
+
+head_2 <- c("species", "Var1", "Var2", "Var3","scenario" , "change_in_CV", "change_in_samp_size", "change_in_no_indiv","EMD") 
+  SUMMARY_table_2 <- data.frame(matrix(nrow=0, ncol=length(head_2)))
+  colnames(SUMMARY_table_2) = head_2                          
+                            
+   CVstr_byspecies_base = CVstr_byspecies[CVstr_byspecies$scenario == BASELINE_scenario,]
+   
+for (nr in 1:nrow(CVstr_byspecies_base)) {
+  
+  to_add <- data.frame(species= CVstr_byspecies_base$species[nr] 
+                       , Var1= CVstr_byspecies_base$Var1[nr]
+                       , Var2= CVstr_byspecies_base$Var2[nr]
+                       , Var3 = CVstr_byspecies_base$Var3[nr]
+                       , scenario = "Baseline"
+                       , CV= round(CVstr_byspecies_base$mean_CV[nr]*100,2), 
+                       samp_size= round(CVstr_byspecies_base$sample_size[nr ],0), 
+                       no_indiv= round(CVstr_byspecies_base$mean_noIndiv[nr ],0)) 
+    
+  SUMMARY_table <- data.frame(rbind(SUMMARY_table, to_add))
+  # colnames(to_add)[6:8] <- head_2[6:8]
+  # to_add$EMD = 0
+  #   SUMMARY_table_2 <- data.frame(rbind(SUMMARY_table_2, to_add))
+
+}
+   
+   CVstr_byspecies_NOT_base = CVstr_byspecies[CVstr_byspecies$scenario != BASELINE_scenario,]
+
+
+
+  for (nr in 1:nrow(CVstr_byspecies_NOT_base)) {
+    
+     CV_base <- round(CVstr_byspecies_base$mean_CV[CVstr_byspecies_base$species== CVstr_byspecies_NOT_base$species[nr] 
+                       & CVstr_byspecies_base$Var1==  CVstr_byspecies_NOT_base$Var1[nr]
+                       & CVstr_byspecies_base$Var2==  CVstr_byspecies_NOT_base$Var2[nr]
+                       & CVstr_byspecies_base$Var3==  CVstr_byspecies_NOT_base$Var3[nr]]*100, 2)
+     samp_size_base <- round(CVstr_byspecies_base$sample_size[CVstr_byspecies_base$species== CVstr_byspecies_NOT_base$species[nr] 
+                       & CVstr_byspecies_base$Var1==  CVstr_byspecies_NOT_base$Var1[nr]
+                       & CVstr_byspecies_base$Var2==  CVstr_byspecies_NOT_base$Var2[nr]
+                       & CVstr_byspecies_base$Var3==  CVstr_byspecies_NOT_base$Var3[nr]], 2)
+      no_indiv_base <- round(CVstr_byspecies_base$mean_noIndiv[CVstr_byspecies_base$species== CVstr_byspecies_NOT_base$species[nr] 
+                       & CVstr_byspecies_base$Var1==  CVstr_byspecies_NOT_base$Var1[nr]
+                       & CVstr_byspecies_base$Var2==  CVstr_byspecies_NOT_base$Var2[nr]
+                       & CVstr_byspecies_base$Var3==  CVstr_byspecies_NOT_base$Var3[nr]], 2)
+    
+    name_sc =  as.character(CVstr_byspecies_NOT_base$scenario[nr])
+  name_sc <- substring( name_sc, 4,nchar(name_sc)) 
+  
+ to_add <- data.frame(species= CVstr_byspecies_NOT_base$species[nr] 
+                       , Var1= CVstr_byspecies_NOT_base$Var1[nr]
+                       , Var2= CVstr_byspecies_NOT_base$Var2[nr]
+                       , Var3 = CVstr_byspecies_NOT_base$Var3[nr]
+                       , scenario = name_sc
+                       , CV= round(CVstr_byspecies_NOT_base$mean_CV[nr]*100,2), 
+                       samp_size= round(CVstr_byspecies_NOT_base$sample_size[nr ],0), 
+                       no_indiv= round(CVstr_byspecies_NOT_base$mean_noIndiv[nr ],0)) 
+
+  SUMMARY_table <- data.frame(rbind(SUMMARY_table, to_add))
+  
+    LFD_baseline <- percs[percs$scenario == BASELINE_scenario &
+                       percs$species ==  CVstr_byspecies_NOT_base$species[nr] &
+                       percs$Var1 == CVstr_byspecies_NOT_base$Var1[nr] &
+                       percs$Var2 == CVstr_byspecies_NOT_base$Var2[nr] &
+                       percs$Var3 == CVstr_byspecies_NOT_base$Var3[nr], colnames(percs) %in% c("length", "perc")]
+
+   LFD_scen <- percs[percs$scenario == as.character(CVstr_byspecies_NOT_base$scenario[nr]) &
+                       percs$species ==  CVstr_byspecies_NOT_base$species[nr]  &
+                       percs$Var1 == CVstr_byspecies_NOT_base$Var1[nr] &
+                       percs$Var2 == CVstr_byspecies_NOT_base$Var2[nr] &
+                       percs$Var3 == CVstr_byspecies_NOT_base$Var3[nr] , colnames(percs) %in% c("length", "perc")]
+  
+   the_two_LFDs <- merge(LFD_baseline, LFD_scen, by =c("length") )
+
+the_two_LFDs[is.na(the_two_LFDs[,])] <- 0
+  
+if (nrow(the_two_LFDs) >0) { 
+  emd_val <- round(emd2d(matrix(the_two_LFDs$perc.x), matrix(the_two_LFDs$perc.y) ), 2)
+} else {
+    emd_val <- NA
+  }
+
+   to_add <- data.frame(species= CVstr_byspecies_NOT_base$species[nr] 
+                       , Var1= CVstr_byspecies_NOT_base$Var1[nr]
+                       , Var2= CVstr_byspecies_NOT_base$Var2[nr]
+                       , Var3 = CVstr_byspecies_NOT_base$Var3[nr]
+                       , scenario = name_sc
+                       , change_in_CV= round(  ( (CVstr_byspecies_NOT_base$mean_CV[nr]*100) - CV_base)/CV_base * 100,2), 
+                        change_in_samp_size= round(  ( (CVstr_byspecies_NOT_base$sample_size[nr]) - samp_size_base)/samp_size_base *100 ,2),  
+                        change_in_no_indiv= round(  ( (CVstr_byspecies_NOT_base$mean_noIndiv[nr]) - no_indiv_base )/no_indiv_base *100 ,2),
+                        EMD =  emd_val )
+
+  SUMMARY_table_2 <- data.frame(rbind(SUMMARY_table_2, to_add))
+
+  }
+   
+ 
+
+  write.table(SUMMARY_table, file=paste(scenarios_path, 
+        "/07_Evaluation/SUMMARY table.csv", sep=""), sep=";", row.names=F)
+  
+    write.table(SUMMARY_table_2, file=paste(scenarios_path, 
+        "/07_Evaluation/SUMMARY table_diff_perc.csv", sep=""), sep=";", row.names=F)
+
+
+ areas <-  unique(SUMMARY_table_2$Var1)
+
+ for (ar in areas) {
+  
+   file_name <- paste(scenarios_path, "/07_Evaluation/",  
+      ar, " - EMDs.jpg", sep="") 
+  
+   EMDs_area <- SUMMARY_table_2[SUMMARY_table_2$Var1 == ar, ]
+   
+   if (ar=="GSA18") {
+      EMDs_area <- SUMMARY_table_2[SUMMARY_table_2$Var1 == ar & SUMMARY_table_2$species == "Parapenaeus longirostris", ] 
+   }
+  
+     ggplot(EMDs_area, aes(y=EMD, x=scenario, color=as.factor(species), size=3 )) + geom_point() + xlab("scenarios") + ylab("EMD") + ggtitle(paste(ar, "- Earth Mover Distance")) + facet_grid(Var2~Var3) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+     ggsave(file_name, last_plot(), width=8, height=6)
+     
+ 
+  
+    summary_ar <- SUMMARY_table[SUMMARY_table$Var1 == ar, ]
+    spes <- unique(summary_ar$species)
+    
+    for (ss in spes) {   
+      
+      file_name <- paste(scenarios_path, "/07_Evaluation/",  ss , " - ",
+      ar, " - CVs vs no. trips vs no. indiv.jpg", sep="") 
+      
+            trips_b <- summary_ar$samp_size[summary_ar$species == ss & summary_ar$scenario ==  "Baseline"  ]
+            ind_b <- summary_ar$no_indiv[summary_ar$species == ss & summary_ar$scenario == "Baseline"  ]
+      
+       summary_ar_this <- summary_ar[summary_ar$species == ss , ]
+      
+       summary_ar_this_base <- summary_ar_this[summary_ar_this$scenario == "Baseline",]
+      # CV	samp_size	no_indiv
+
+          ggplot(summary_ar_this, aes(y=no_indiv, x=samp_size, color= as.factor(scenario), size=CV )) + geom_point() + xlab("sample size (no. of trips)") + ylab("no. of measured individuals") + ggtitle(paste(ss, " - ", ar, "- Summary")) + facet_grid(Var2~Var3) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) + geom_hline(data=summary_ar_this_base, aes(yintercept =summary_ar_this_base$no_indiv) , linetype="dashed") + geom_vline(data=summary_ar_this_base, aes(xintercept = summary_ar_this_base$samp_size) , linetype="dashed")
+      ggsave(file_name, last_plot(), width=10, height=6) 
+      
+    }
+    
+   
+   
+     
+ }
+ 
+ # by trip/commCat
+ 
+ all_HL_table$trp_commCat <- paste( all_HL_table$trpCode, all_HL_table$staNum, all_HL_table$commCat, sep="_") 
+ 
+ all_HL_table_aggr <- group_by(all_HL_table, scenario , spp, Var1 ,Var2, Var3, trp_commCat) 
+ all_HL_table_aggr <- summarize(all_HL_table_aggr, totInd = sum(lenNum)) 
+
+ all_HL_table_aggr_B <- all_HL_table_aggr[all_HL_table_aggr$scenario == BASELINE_scenario, colnames(all_HL_table_aggr) != "scenario"]
+ all_HL_table_aggr_notB <- all_HL_table_aggr[all_HL_table_aggr$scenario != BASELINE_scenario, ]
+ 
+ A <- merge(all_HL_table_aggr_B, all_HL_table_aggr_notB, by=c("spp", "Var1", "Var2" , "Var3", "trp_commCat") )
+ 
+ A$diff <- A$totInd.x - A$totInd.y
+ B <- A[A$diff != 0, ]
+ 
+  areas <-  unique(B$Var1)
+  
+ for (ar in areas) {
+
+   B_this <- B[B$Var1 == ar, ]
+    spes <- unique(B_this$spp)
+    
+    for (ss in spes) {
+      
+       B_this_spe <- B_this[B_this$spp == ss , ]
+         scens <-  unique(B_this_spe$scenario)
+         
+        for (sc in scens) {
+      
+       file_name <- paste(scenarios_path, "/07_Evaluation/",  ss , " - ",
+      ar, " - ", sc, " - Reduction of measured individuals_trip_commCat.jpg", sep="") 
+      
+       B_this_spe_sc <- B_this_spe[B_this_spe$scenario == sc , ] 
+       colnames(B_this_spe_sc)[ colnames(B_this_spe_sc) == "totInd.x"] <- "Baseline"
+       colnames(B_this_spe_sc)[ colnames(B_this_spe_sc) == "totInd.y"] <- "Scenario reduction"
+       B_this_spe_sc <- B_this_spe_sc[, c(1:5,7,9,6,8)]
+       B_this_spe_sc_melt <- melt(B_this_spe_sc, id=1:7)
+  
+       
+ggplot(data=B_this_spe_sc_melt, aes(x=trp_commCat, y=value, fill=variable )) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_brewer(palette="Paired")+ ggtitle(paste(ss , " - ",
+      ar, " - ", sc, " - Reduction of measured individuals by trip-commercial category"))
+  facet_grid(Var2~Var3)
+     
+     ggsave(file_name, last_plot(), width=16 , height=6)
+     
+      
+        }
+    }
+    
+   
+   
+     
+ }
+  
+
+  # by trip/commCat
+ all_HL_table$trp <- paste( all_HL_table$trpCode, all_HL_table$staNum, sep="_") 
+ 
+ all_HL_table_aggr <- group_by(all_HL_table, scenario , spp, Var1 ,Var2, Var3, trp) 
+ all_HL_table_aggr <- summarize(all_HL_table_aggr, totInd = sum(lenNum)) 
+
+ all_HL_table_aggr_B <- all_HL_table_aggr[all_HL_table_aggr$scenario == BASELINE_scenario, colnames(all_HL_table_aggr) != "scenario"]
+ all_HL_table_aggr_notB <- all_HL_table_aggr[all_HL_table_aggr$scenario != BASELINE_scenario, ]
+ 
+ A <- merge(all_HL_table_aggr_B, all_HL_table_aggr_notB, by=c("spp", "Var1", "Var2" , "Var3", "trp") )
+ 
+ A$diff <- A$totInd.x - A$totInd.y
+ B <- A[A$diff != 0, ]
+ 
+  areas <-  unique(B$Var1)
+  
+ for (ar in areas) {
+
+   B_this <- B[B$Var1 == ar, ]
+    spes <- unique(B_this$spp)
+    
+    for (ss in spes) {
+      
+       B_this_spe <- B_this[B_this$spp == ss , ]
+         scens <-  unique(B_this_spe$scenario)
+         
+        for (sc in scens) {
+      
+       file_name <- paste(scenarios_path, "/07_Evaluation/",  ss , " - ",
+      ar, " - ", sc, " - Reduction of measured individuals_trip.jpg", sep="") 
+      
+       B_this_spe_sc <- B_this_spe[B_this_spe$scenario == sc , ] 
+       colnames(B_this_spe_sc)[ colnames(B_this_spe_sc) == "totInd.x"] <- "Baseline"
+       colnames(B_this_spe_sc)[ colnames(B_this_spe_sc) == "totInd.y"] <- "Scenario reduction"
+       B_this_spe_sc <- B_this_spe_sc[, c(1:5,7,9,6,8)]
+       B_this_spe_sc_melt <- melt(B_this_spe_sc, id=1:7)
+  
+       
+ggplot(data=B_this_spe_sc_melt, aes(x=trp, y=value, fill=variable )) + theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  geom_bar(stat="identity", position=position_dodge())+
+  scale_fill_brewer(palette="Paired")+ ggtitle(paste(ss , " - ",
+      ar, " - ", sc, " - Reduction of measured individuals by trip"))
+  facet_grid(Var2~Var3) 
+     
+     ggsave(file_name, last_plot(), width=16 , height=6)
+     
+      
+        }
+    }
+    
+   
+   
+     
+ }
+ 
+ 
+ 
+```
+
