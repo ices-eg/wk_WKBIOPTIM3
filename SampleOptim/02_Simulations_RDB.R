@@ -133,7 +133,7 @@ vonberPoryear<-function(year){
 svTypical <- list(Linf=stt$Linf,K=stt$K,t0=-stt$to) ##Initial parameters values for the growth curve 
 vbTypical <- Length_class~Linf*(1-exp(-K*(Age-t0))) ##von Bertallanfy growth model
 control<- nls.control(maxiter=10000)
-n <- stt$n  ##Number of iterations for simulation process (bootstrap runs)
+n <- stt$n  ##Number of iterations for simulation process 
 tm<- stt$TIME_STRATA ##Time interval (T="quarter", A="year", S="semester"), for the otoliths selection by length class
 
 ## Define the age distribution (according to the original dataset) for predictions
