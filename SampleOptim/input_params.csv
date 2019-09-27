@@ -1,0 +1,23 @@
+Names of variables;Mandatory;Variable.values;Definition
+species;y;MAC;CODE_FAO
+AREA;y;27.9.a;
+VARIABLE;y;all;"age - only statistical analysis for age; all - statistical analysis age and maturity"
+PORT;n ;TRUE;"Uses Port stratification for subsampling (TRUE); Do not consider Port stratification for subsampling (FALSE)"
+distUniPorto;n;TRUE;"Uniform distribution of subsamples by Port (TRUE); Randomly distribution of subsamples by Port (FALSE)"
+TIME_STRATA;y;T;"A - year; S - semester; T - quarter"
+SEX_RATIO;y;0.5;"0 - only males; 1 - only females; 0<numeric<1 sexratio proportion; FALSE - not considers sexratio"
+MIN_LC;y;13;minimum length class 
+MAX_LC;y;49;maximum length class
+interval_LC;y;1;length class step 
+MIN_age;y;0;minimum age
+MAX_age;y;10;maximum age
+MIN_OTOL.Read;y;1;minimum number os individuals by length class in the simulation setup
+MAX_OTOL.Read;y;20;maximum number os individuals by length class in the simulation setup
+interval_OTOL.Read;y;1;interval number os individuals by length class in the simulation setup
+Linf;y;50;Von Bertallanfy growth model parameter - Linf. Used as a starting value to adjust VBGM.
+K;y;0.1;Von Bertallanfy growth model parameter - k. Used as a starting value to adjust VBGM.
+t0;y;-3;Von Bertallanfy growth model parameter - t0. Used as a starting value to adjust VBGM.
+year_start;y;2011;first year data subset to run simulations
+year_end;y;2014;last year data subset to run simulations
+stage_mature;y;>2;define the maturity stages that correspond to mature stages (to allow to determine the proportion of immatures and matures) 
+n;y;10;define the number of simulations (bootstrap runs)
