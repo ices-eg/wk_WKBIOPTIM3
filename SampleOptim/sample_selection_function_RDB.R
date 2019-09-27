@@ -50,7 +50,7 @@ porClassesPorSex<-function(todos,classes,SexR,numTotF,numTotM){
     q_s1<-porSex(parte,SexR,numTotF,numTotM)
     idRes<-c(idRes, q_s1);
   }
-  print(paste("Número de individuos: ",length(idRes)))
+  print(paste("NÃºmero de individuos: ",length(idRes)))
   return(idRes);
 }
 
@@ -106,20 +106,20 @@ trimestre<-function(month){
   return(ceiling(month/3))
 }
 
-############################ Last version ###############################
+
 
 # SexRatio - proportion of females and males (ex: 1 - 100% females, 0 - 100% males, 0.2 - 20% females 80% males)
 #   if SexRatio <0 the selection in not dependent of the individuals Sex
 # conjClasses - length classes range
 # quantidade - number of individuals by length class
 # tm - temporal option 
-#     1S - by year and only concerning 1º semester
-#     2S - by year and only concerning 2º semester
+#     1S - by year and only concerning 1Âº semester
+#     2S - by year and only concerning 2Âº semester
 #     S  - by year and by semester
-#     1T - by year and only concerning 1º quarter
-#     2T - by year and only concerning 2º quarter
-#     3T - by year and only concerning 3º quarter
-#     4T - by year and only concerning 4º quarter
+#     1T - by year and only concerning 1Âº quarter
+#     2T - by year and only concerning 2Âº quarter
+#     3T - by year and only concerning 3Âº quarter
+#     4T - by year and only concerning 4Âº quarter
 #     T  - by year and by quarter
 #     A  - by year
 # 
@@ -129,30 +129,30 @@ amostraTemporal<-function(tab, quantidade, conjClasses, SexRatio=NaN, tm="T", po
   original<-tab;
   idRes<-NULL
   tab<-switch(tm,
-              "1S" = tab[tab$SEMESTRE==1,],   # 1º semester
-              "2S" = tab[tab$SEMESTRE==2,],   # 2º semester
-              "1T" = tab[tab$TRIMESTRE==1,],  # 1º quarter
-              "2T" = tab[tab$TRIMESTRE==2,],  # 2º quarter
-              "3T" = tab[tab$TRIMESTRE==3,],  # 3º quarter
-              "4T" = tab[tab$TRIMESTRE==4,],  # 4º quarter
+              "1S" = tab[tab$SEMESTRE==1,],   # 1Âº semester
+              "2S" = tab[tab$SEMESTRE==2,],   # 2Âº semester
+              "1T" = tab[tab$TRIMESTRE==1,],  # 1Âº quarter
+              "2T" = tab[tab$TRIMESTRE==2,],  # 2Âº quarter
+              "3T" = tab[tab$TRIMESTRE==3,],  # 3Âº quarter
+              "4T" = tab[tab$TRIMESTRE==4,],  # 4Âº quarter
               "A"  = tab,                     # year
               "S"  = tab,                     # semester
               "T"  = tab                      # quarter
   );
   if(is.null(tab)){
-    print(paste("ERRO: Período temporal não foi inserido correctamente: <", tm,">"));
+    print(paste("ERRO: PerÃ­odo temporal nÃ£o foi inserido correctamente: <", tm,">"));
     return (NULL);
   }
-  print(paste("Período de tempo: ",tm));
-  print(paste("Número de indivíduos: ",dim(tab)[1]));
+  print(paste("PerÃ­odo de tempo: ",tm));
+  print(paste("NÃºmero de indivÃ­duos: ",dim(tab)[1]));
   SexR<-TRUE;
   if(!is.nan(SexRatio) & (SexRatio>=0) & (SexRatio<=1)){ # escolher de acordo com o SexRatio
-    #calcular número de fêmeas e macho a escolher
+    #calcular nÃºmero de fÃªmeas e macho a escolher
     numTotF<-ceiling(quantidade * SexRatio);
     numTotM<-quantidade -numTotF;
-    print(paste("SexRatio: ", SexRatio, "Femêas:",numTotF,"Machos:",numTotM));
+    print(paste("SexRatio: ", SexRatio, "FemÃªas:",numTotF,"Machos:",numTotM));
   } else { SexR<-FALSE; print("SexRatio: Ignore"); }
-  print(paste("Número de classes: ", length(conjClasses)));
+  print(paste("NÃºmero de classes: ", length(conjClasses)));
   if(tm=="S"){
     ano<-unique(tab$ANO);
     for(a in ano)
@@ -190,7 +190,7 @@ amostraTemporal<-function(tab, quantidade, conjClasses, SexRatio=NaN, tm="T", po
       idRes<-c(idRes, q_s1);
     }
   }
-  else{ #tab contém a escolha de acordo com tm= "1S","2S","1T","2T","3T" ou "4T"
+  else{ #tab contÃ©m a escolha de acordo com tm= "1S","2S","1T","2T","3T" ou "4T"
     ano<-unique(tab$ANO);
     for(a in ano){
       print(paste("ano:",a," ",tm,sep=''))
