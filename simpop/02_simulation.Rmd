@@ -1,0 +1,160 @@
+---
+title: 'WKBIOPTIM2: optimization at the population level'
+author: "John Doe"
+date: '`r date()`'
+output:
+  html_document: default
+---
+
+This report define the simulation scenario.
+
+
+```{r compil,eval=F,include=F,cache=F,echo=F,warning=F,message=F,progress=F,verbose=F}
+#just a reminder to how compile a docx doc
+if(F){
+rmarkdown::render("",c("word_document"))
+}
+```
+
+
+#Tools
+
+R, Rstudio and packages.
+
+```{r global_options}
+#working directory have to be the directory where is the Rmarkdown file.
+setwd("~/ifremer/wkbioptim2/scripts/pop_level_sim_ope")
+#R general option:
+options(stringsAsFactors = FALSE)
+#chunk option
+knitr::opts_chunk$set(cache=FALSE,echo=TRUE, warning=FALSE, 
+	message=FALSE, fig.height=6,progress=FALSE,verbose=FALSE,
+		include=TRUE,dev='png',autodep=FALSE)
+#package
+library(COSTcore)
+library(COSTdbe)
+library(COSTeda)
+library(dplyr) 
+library(ggplot2)
+library(maps)
+library(mapdata)
+library(pander)
+#DATRAS is not available on CRAN so use devtools:
+#devtools::install_github("DTUAqua/DATRAS/DATRAS")
+library(DATRAS)
+#library(earthmovdist) deprecated
+library(emdist)
+library(sampling) # for stratified random sampling
+
+#source local functions file
+source("fct.R")
+
+#load the data
+load("./data/dataready.rdata")
+
+```
+#Data
+
+The data saved in the previous analyses are loaded.
+
+```{r data1,eval=F}
+load("./data/dataready.rdata")
+```
+
+#Sampling object randomly
+
+The main process is sample removal in the original data.
+In `CSc` object, the variable `trpCode` is the trip identifier, while staNum is
+the haul id (unique *only* by `trpcode`).
+
+##Trip selection
+
+###Random trip selection
+
+n trips are selected randomly with replacement.
+In the following example `n=20`.
+
+```{r randomtrip}
+	idtrip<-unique(CSc@hh$trpCode)
+	idtriprand<-sample(idtrip,20,replace=T)	
+```
+
+###Stratified random trip selection
+
+n trips are selected randomly with replacement stratified by quarter.
+In the following example `n=20`.
+
+```{r stratrandomtrip1}
+	idtrip<-CSc@hh%>%select(trpCode,strata=time)%>%distinct()
+	nbbystrat<-rep(20,length(unique(idtrip$strata)))
+	idtripstrata<-strata(idtrip,stratanames="strata",size=nbbystrat,method="srswr")
+	idtripstrata$trpCode<-idtrip$trpCode[idtripstrata$ID_unit]
+```
+
+n trips are selected randomly with replacement stratified by quarter and metier.
+In the following example `n=20`.
+
+```{r stratrandomtrip2}
+	idtrip<-CSc@hh%>%
+		group_by(trpCode)%>%
+		summarize(strata1=unique(time),strata2=paste(sort(unique(technical)),collapse=","))%>%
+		ungroup()
+	nbbystrat<-rep(20,length(paste(idtrip$strata1,idtrip$strata2)))
+	idtripstrata<-strata(idtrip,stratanames=c("strata1","strata2"),size=nbbystrat,method="srswr")
+	idtripstrata$trpCode<-idtrip$trpCode[idtripstrata$ID_unit]
+```
+
+##Haul selection
+
+###Random haul selection
+
+n hauls are selected randomly with replacement.
+In the following example `n=20`.
+
+```{r randomhaul}
+	idhaul<-unique(paste(CSc@hh$trpCode,CSc@hh$staNum))
+	idhaulrand<-sample(idhaul,20,replace=T)	
+```
+
+Stratified haul selection can be done following the trips example.
+
+
+#Simulation
+
+Use the functions `simutrip` and `simutriplan`
+
+##Trips
+
+```{r simurandomtrip}
+	rez<-simutrip(CSc,myStr,c(5,10,20),3)
+```
+
+```{r simurandomtripplt}
+	ggplot(na.omit(rez[[1]]),aes(x=length,y=value,color=n))+
+		 scale_color_distiller(palette='Spectral')+
+		geom_point(alpha=.2)+
+		facet_grid(spp~technical,scale="free_y")+
+		theme_bw()+
+ 		theme(axis.text.x = element_text(size=8, angle=90),
+		axis.text.y = element_text(size=10, angle=0),
+		strip.text.x=element_text(size=8,angle=90),
+		strip.text.y=element_text(size=8,angle=0),
+		legend.position="bottom")
+	ggplot(na.omit(rez[[2]]),aes(x=length,y=value,color=n))+
+		 scale_color_distiller(palette='Spectral')+
+		geom_point(alpha=.2)+
+		facet_grid(spp~technical,scale="free_y")+
+		theme_bw()+
+ 		theme(axis.text.x = element_text(size=8, angle=90),
+		axis.text.y = element_text(size=10, angle=0),
+		strip.text.x=element_text(size=8,angle=90),
+		strip.text.y=element_text(size=8,angle=0),
+		legend.position="bottom")
+	ggplot(na.omit(rez[[3]]),aes(x=n,y=wcv))+
+		geom_poin()+
+		facet_grid(~spp)
+
+```
+
+
+
