@@ -42,6 +42,7 @@
 		for (i in ref_tab$CA_Standard)
 			{if (!i %in% colnames(df0)) df0[i]<-"No info"} 
 
+		
 	# Column prep [project specific]
 		# tweak on indWt
 		df0$indWt<-as.numeric(gsub(",",".",as.character(df0$indWt)))
