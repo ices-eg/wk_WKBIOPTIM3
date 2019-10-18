@@ -11,7 +11,7 @@
 	# 2019-05-23: restructured and clarified steps and annotations
 
 	# wishlist
-		# if desing 
+		# if design 
 
 	
 	rm(list=ls())
