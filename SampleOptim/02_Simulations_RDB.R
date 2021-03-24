@@ -43,34 +43,18 @@ setwd(paste(this_dir,"data",sep="/")) ##Set directory for data and settings
 ### Source file
 source(paste(this_dir,"sample_selection_function_RDB.r",sep="/"))##Function for randomly select the samples by length class
 
-### Biological sample data (Applied to a period of years)
+###Biological sample data (Applied to a period of years)
 ### load input data
-data_samplebio<- load(file="input_data.rdata")
+data_samplebio<- read.table("whb_data_bio.csv",sep=";", header=T) ### Biological sampling data
 
-
-### Prepare  directory for output files
-out_dir<-paste(this_dir,"output",sep="/")
-dir.create(out_dir)
-setwd(out_dir)
-
+summary(data_samplebio)
 
 ###### Input settings file
 sett<- read.table("input_params.csv",sep=";", header=F,row.names = c(), stringsAsFactors=FALSE)
 stt<- data.frame(t(sett), stringsAsFactors=FALSE)
 rownames(stt)<- c()
 colnames(stt) <- as.character(unlist(stt[1,]))
-stt = stt[-1, ]
-
-### use this for parameters that can take FALSE/ TRUE as values
-stt<-stt%>% dplyr::mutate_at(c("SEX_RATIO","distUniPorto","PORT"),function(x) type.convert(x[1]))
-
-## convert to numeric if needed
-stt[,1:ncol(stt)]=lapply(1:ncol(stt),function(x) {
-  tryCatch({
-    as.numeric(stt[[x]])
-  },warning = function(w) {
-    stt[[x]]}
-  )} )
+stt <- stt[-1, ]
 
 #########################################################################################################
 #########################################################################################################
@@ -81,7 +65,7 @@ stt[,1:ncol(stt)]=lapply(1:ncol(stt),function(x) {
 ### Age classes 
 data_samplebio<-data_samplebio[!is.na(data_samplebio$Age),]
 
-length_class<- seq(stt$MIN_LC,stt$MAX_LC,stt$interval_LC) ##set length class range and the intervals 
+length_class<- seq(as.numeric(stt$MIN_LC[[2]]),as.numeric(stt$MAX_LC[[2]]),as.numeric(stt$interval_LC[[2]])) ##set length class range and the intervals
 
 set.seed(2019)
 
@@ -90,27 +74,19 @@ set.seed(2019)
 ########################################################################################################
 ####2.2  Set function for von Bertalanffy growth model (VBGM) parameters (Linf, K and t0)
 ########################################################################################################
-vonberPoryear<-function(year){
+vonberPorAno<-function(ano){
   system.time(
-    vvv <- lapply(1:n, function(i,years) {
-    data<- amostraTemporal(data_samplebio[data_samplebio$year==years,], j, length_class,stt$SEX_RATIO,stt$TIME_STRATA, porto=stt$PORT, distUniPorto=stt$distUniPorto)
-    ## Subsampling simulations
-      fitTypical <-try( nls(vbTypical,data=data,start=svTypical,control), silent = TRUE)
-      if (!inherits(fitTypical, "try-error")){
-        coef<- summary(fitTypical)$coefficients
-        Linf<- summary(fitTypical)$coefficients[[1]]
-        K<- summary(fitTypical)$coefficients[[2]]
-        t0<- summary(fitTypical)$coefficients[[3]]
-        predict_values<-  predict(fitTypical,newdata=newdata)
-       return(list(year=year,data=data,coef=coef,Linf=Linf,K=K,t0=t0,predict_values=predict_values,n=j))
-      }      
-      else{ ## For cases where is not possible to adjust the VBGM to data, but we want to proceed with the subsampling simulations
-        Linf=NA
-        K=NA
-        t0=NA
-      return(list(Linf=Linf,K=K,t0=t0,year=year,data=data,n=j))
-      }
-    }, year)
+    vvv <- lapply(1:n, function(i,ano) {
+      data<- amostraTemporal(data_samplebio[data_samplebio$year==ano,], j, length_class, 0.5,tm, porto=FALSE, distUniPorto=FALSE)
+      ##Retira a amostra definida
+      fitTypical <- nls(vbTypical,data=data,start=svTypical,control)
+      coef<-summary(fitTypical)$coefficients
+      Linf<-summary(fitTypical)$coefficients[[1]]
+      K<-summary(fitTypical)$coefficients[[2]]
+      t0<-summary(fitTypical)$coefficients[[3]]
+      predict_values<- predict(fitTypical,newdata=newdata)
+      return(list(year=ano,data=data,coef=coef,Linf=Linf,K=K,t0=t0,predict_values=predict_values,n=j))
+    }, ano)
   )[[3]] #
   return(vvv)
 }
@@ -130,28 +106,29 @@ vonberPoryear<-function(year){
 #########################################################################################################################
 ##### Initial values set and fixed by species
 ###Initial values for parameters to all the simulations
-svTypical <- list(Linf=stt$Linf,K=stt$K,t0=-stt$to) ##Initial parameters values for the growth curve 
-vbTypical <- Length_class~Linf*(1-exp(-K*(Age-t0))) ##von Bertallanfy growth model
+svTypical <- list(Linf=as.numeric(stt$Linf[[2]]),K=as.numeric(stt$K[[2]]),t0=-as.numeric(stt$t0[[2]])) ##Initial parameters values for the growth curve
+vbTypical <- C_CLASSE~Linf*(1-exp(-K*(IDADE-t0))) ##von Bertallanfy growth model
 control<- nls.control(maxiter=10000)
-n <- stt$n  ##Number of iterations for simulation process 
-tm<- stt$TIME_STRATA ##Time interval (T="quarter", A="year", S="semester"), for the otoliths selection by length class
+n <- as.numeric(stt$n[[2]])  ##Number of iterations for simulation process
+tm<- as.factor(stt$TIME_STRATA[[2]]) ##Time interval (T="quarter", A="year", S="semester"), for the otoliths selection by length class
+sexratio<-as.numeric(sett[8,3]) #definido no file "input params"
+porto<-as.factor(sett[5,3])  #definido no file "input params"
+distUniPorto<-as.factor(sett[6,3])  #definido no file "input params"
 
 ## Define the age distribution (according to the original dataset) for predictions
-newdata<-seq(stt$MIN_age,stt$MAX_age,0.1) ###set age distribution vector for predictions
+newdata<-seq(as.numeric(stt$MIN_age[[2]]),as.numeric(stt$MAX_age[[2]]),0.1) ###set age distribution vector for predictions
 newdata<-data.frame(newdata)
-colnames(newdata)<- "Age"
-year_init<- stt$year_start
-year_last<- stt$year_end
-years<- seq(year_init,year_last,by=1) ##set de dados definido com base no ajuste the VB j=1
+colnames(newdata)<- "IDADE"
+year_init<- as.numeric(stt$year_start[[2]])
+year_last<- as.numeric(stt$year_end[[2]])
+years<- seq(year_init,year_last,by=1)
 
-years<-years[years %in% unique(data_samplebio$year)]
 otol.per.lc=seq(stt$MIN_OTOL.Read,stt$MAX_OTOL.Read,stt$interval_OTOL.Read) # Number of otoliths by length class as a setup for simulations
 
 ##########################################################################################################
 ### Running the function for the different options on the number of otoliths/individuals by length class 
    
- for (j in otol.per.lc ){ ###  is the number of otoliths/individuals selected by length class
-  
+ 
   vonber<-sapply(years, vonberPoryear) 
 
 ######################################
