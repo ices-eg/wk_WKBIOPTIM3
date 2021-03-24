@@ -59,7 +59,7 @@ nsamples_year_mes<- data_samplebio %>% group_by(Port, month, year) %>% count(dat
 #write.table(nsamples_year_mes, "numbersamples_summary_WHB.csv",sep=",")
 
 #### Length classes of the samples by Port, year and month
-lengthclass_samples_year_mes<- date_samplebio %>% group_by(Port, month, year) %>% count(Length_class)
+lengthclass_samples_year_mes<- data_samplebio %>% group_by(Port, month, year) %>% count(Length_class)
 #write.table(lengthclass_samples_year_mes, "numberlengthclasses_samples_summary_MAC.csv",sep=",")
 
 ########Figure a - length distribution samples by Port by year and month
