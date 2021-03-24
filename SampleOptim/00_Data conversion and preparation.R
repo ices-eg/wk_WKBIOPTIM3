@@ -71,13 +71,14 @@ stt[,1:ncol(stt)]=lapply(1:ncol(stt),function(x) {
 ### Dataset with biological sample data (Applied to a period of years)
 ca<- read.table("CA.csv",sep=";", header=T)
 
+### R-code on the next lines is from Eirini Mantzouni
 ca$date = paste("1",ca$month,ca$year,sep = "/") 
 ca$COD_FAO <- NA 
 data_samplebio1 <- ca[,c("fishId","date","month","year","COD_FAO","subRect","lenCls","indWt","sex","matStage","age","spp","area")]
 
 names(data_samplebio1) <- c("ID_BIO_FISH","date", "month" , "year", "COD_FAO","Port", "Length_class" ,"Weight" ,  "Sex","Maturity_stage" ,"Age" , "SPECIES","GSA")
 
-data_samplebio<- data_samplebio1 %>% filter(SPECIES==stt$species & GSA==stt$AREA)
+data_samplebio<- data_samplebio1 %>% filter(SPECIES==stt$species & GSA==stt$AREA) ##GSA is the area in the Mediterranean
 
 save(data_samplebio,stt, file= "input_data.rdata")
 
