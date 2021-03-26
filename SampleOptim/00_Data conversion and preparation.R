@@ -80,7 +80,7 @@ names(data_samplebio1) <- c("ID_BIO_FISH","date", "month" , "year", "COD_FAO","P
 
 data_samplebio<- data_samplebio1 %>% filter(SPECIES==stt$species & GSA==stt$AREA) ##GSA is the area in the Mediterranean
 
-save(data_samplebio,stt, file= "input_data.rdata")
+save(data_samplebio,stt, file= "data_samplebio.rdata")
 
 ##############################################################################################################################
 ##############################################################################################################################
